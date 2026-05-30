@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html>
+<head><title>Debug Approve</title></head>
+<body>
+<pre id="output">Testing...</pre>
+<script>
+const API_URL = 'http://localhost:3000/api/v1';
+
+async function test() {
+    const output = document.getElementById('output');
+    let log = '';
+
+    try {
+        // Step 1: Login as ORG_ADMIN
+        log += '1. Logging in as admin@majujaya.sch.id...\n';
+        const loginRes = await fetch(`${API_URL}/auth/login`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email: 'admin@majujaya.sch.id', password: 'admin123' })
+        });
+        const loginData = await loginRes.json();
+        log += `Login status: ${loginRes.status}\n`;
+        log += `Login response: ${JSON.stringify(loginData, null, 2)}\n\n`;
+        output.textContent = log;
+
+        if (!loginRes.ok) return;
+
+        const token = loginData.accessToken;
+        const orgId = loginData.organization.id;
+
+        // Step 2: Get permissions
+        log += '2. Getting permissions...\n';
+        const permsRes = await fetch(`${API_URL}/permissions`, {
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'X-Organization-Id': orgId
+            }
+        });
+        const perms = await permsRes.json();
+        log += `Permissions status: ${permsRes.status}\n`;
+        log += `Found ${perms.length} permissions\n`;
+        
+        const pending = perms.filter(p => p.status === 'PENDING');
+        log += `Pending permissions: ${pending.length}\n`;
+        
+        if (pending.length === 0) {
+            log += 'NO PENDING PERMISSIONS TO APPROVE!\n';
+            output.textContent = log;
+            return;
+        }
+
+        const targetId = pending[0].id;
+        log += `Target permission ID: ${targetId}\n\n`;
+        output.textContent = log;
+
+        // Step 3: Try to approve
+        log += '3. Attempting to approve...\n';
+        const approveRes = await fetch(`${API_URL}/permissions/${targetId}/approve`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`,
+                'X-Organization-Id': orgId
+            },
+            body: JSON.stringify({ note: 'Test approval' })
+        });
+        
+        const approveText = await approveRes.text();
+        log += `Approve status: ${approveRes.status}\n`;
+        log += `Approve response headers: ${JSON.stringify(Object.fromEntries(approveRes.headers.entries()), null, 2)}\n`;
+        log += `Approve response body: ${approveText}\n\n`;
+
+        try {
+            const approveData = JSON.parse(approveText);
+            log += `Parsed error: ${JSON.stringify(approveData, null, 2)}\n`;
+        } catch(e) {}
+
+    } catch (err) {
+        log += `\nFATAL ERROR: ${err.message}\n${err.stack}\n`;
+    }
+
+    output.textContent = log;
+}
+
+test();
+</script>
+</body>
+</html>

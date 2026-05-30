@@ -1,0 +1,301 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// ==========================================
+// ENUMS
+// ==========================================
+
+enum UserRole {
+  SUPER_ADMIN
+  ORG_ADMIN
+  TEACHER
+  STUDENT
+  PARENT
+}
+
+enum PermissionType {
+  SICK
+  FAMILY
+  EVENT
+  LATE
+  LEAVE_EARLY
+  OTHER
+}
+
+enum PermissionStatus {
+  DRAFT
+  PENDING
+  APPROVED
+  REJECTED
+  ARCHIVED
+}
+
+// ==========================================
+// MODELS
+// ==========================================
+
+model Organization {
+  id          String   @id @default(uuid())
+  slug        String   @unique
+  name        String
+  logoUrl     String?
+  brandColor  String   @default("#00A86B") // Default Green
+  address     String?
+  contact     String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  users               User[]
+  students            Student[]
+  teachers            Teacher[]
+  parents             Parent[]
+  classRooms          ClassRoom[]
+  permissionRequests  PermissionRequest[]
+  letterTemplates     LetterTemplate[]
+  generatedLetters    GeneratedLetter[]
+  notifications       Notification[]
+  auditLogs           AuditLog[]
+
+  @@index([slug])
+  @@index([isActive])
+}
+
+model User {
+  id             String    @id @default(uuid())
+  organizationId String
+  email          String
+  passwordHash   String
+  role           UserRole
+  fullName       String
+  avatarUrl      String?
+  isActive       Boolean   @default(true)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  deletedAt      DateTime?
+
+  // Relations
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  studentProfile Student?
+  teacherProfile Teacher?
+  parentProfile  Parent?
+  auditLogs      AuditLog[]
+  notifications  Notification[]
+
+  @@unique([organizationId, email]) // Multi-tenant unique email constraint
+  @@index([organizationId])
+  @@index([email])
+  @@index([role])
+}
+
+model Student {
+  id             String    @id @default(uuid())
+  organizationId String
+  userId         String    @unique
+  classRoomId    String
+  parentId       String?
+  studentIdNumber String?   // NIS/NISN
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  deletedAt      DateTime?
+
+  // Relations
+  organization       Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user               User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  classRoom          ClassRoom           @relation(fields: [classRoomId], references: [id], onDelete: Cascade)
+  parent             Parent?             @relation(fields: [parentId], references: [id], onDelete: SetNull)
+  permissionRequests PermissionRequest[]
+
+  @@unique([organizationId, studentIdNumber])
+  @@index([organizationId])
+  @@index([classRoomId])
+  @@index([parentId])
+}
+
+model Teacher {
+  id             String    @id @default(uuid())
+  organizationId String
+  userId         String    @unique
+  employeeNumber String?   // NIP/NUPTK
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  deletedAt      DateTime?
+
+  // Relations
+  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  classRooms   ClassRoom[]   // Homeroom teacher
+  approvals    ApprovalLog[]
+
+  @@unique([organizationId, employeeNumber])
+  @@index([organizationId])
+}
+
+model Parent {
+  id             String    @id @default(uuid())
+  organizationId String
+  userId         String    @unique
+  contactNumber  String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  deletedAt      DateTime?
+
+  // Relations
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  students     Student[]
+
+  @@index([organizationId])
+}
+
+model ClassRoom {
+  id             String    @id @default(uuid())
+  organizationId String
+  name           String    // e.g., "XII IPA 1"
+  homeroomTeacherId String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  deletedAt      DateTime?
+
+  // Relations
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  homeroomTeacher Teacher?     @relation(fields: [homeroomTeacherId], references: [id], onDelete: SetNull)
+  students        Student[]
+
+  @@unique([organizationId, name])
+  @@index([organizationId])
+  @@index([homeroomTeacherId])
+}
+
+model PermissionRequest {
+  id             String           @id @default(uuid())
+  organizationId String
+  studentId      String
+  type           PermissionType
+  status         PermissionStatus @default(DRAFT)
+  reason         String
+  startDate      DateTime
+  endDate        DateTime
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+  deletedAt      DateTime?
+
+  // Relations
+  organization Organization           @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  student      Student                @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  attachments  PermissionAttachment[]
+  approvals    ApprovalLog[]
+  generatedLetters GeneratedLetter[]
+
+  @@index([organizationId])
+  @@index([studentId])
+  @@index([status])
+  @@index([startDate, endDate])
+}
+
+model PermissionAttachment {
+  id                  String   @id @default(uuid())
+  permissionRequestId String
+  fileUrl             String
+  fileName            String
+  fileSize            Int
+  createdAt           DateTime @default(now())
+
+  // Relations
+  permissionRequest PermissionRequest @relation(fields: [permissionRequestId], references: [id], onDelete: Cascade)
+
+  @@index([permissionRequestId])
+}
+
+model ApprovalLog {
+  id                  String           @id @default(uuid())
+  permissionRequestId String
+  teacherId           String?
+  status              PermissionStatus // APPROVED or REJECTED
+  note                String?
+  createdAt           DateTime         @default(now())
+
+  // Relations
+  permissionRequest PermissionRequest @relation(fields: [permissionRequestId], references: [id], onDelete: Cascade)
+  teacher           Teacher?          @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+
+  @@index([permissionRequestId])
+  @@index([teacherId])
+}
+
+model LetterTemplate {
+  id             String   @id @default(uuid())
+  organizationId String
+  title          String   // e.g., "Surat Izin Sakit Resmi"
+  contentHtml    String   // Template with placeholders like {{student_name}}, {{class}}, etc.
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  // Relations
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+}
+
+model GeneratedLetter {
+  id                  String   @id @default(uuid())
+  organizationId      String
+  permissionRequestId String
+  letterNumber        String   @unique // Format e.g., 001/IZIN-SK/XII/2026
+  pdfUrl              String
+  verificationToken   String   @unique @default(uuid()) // QR code scans this URL to verify
+  createdAt           DateTime @default(now())
+
+  // Relations
+  organization   Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  permissionRequest PermissionRequest @relation(fields: [permissionRequestId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([permissionRequestId])
+  @@index([verificationToken])
+}
+
+model Notification {
+  id             String   @id @default(uuid())
+  organizationId String
+  userId         String
+  title          String
+  body           String
+  isRead         Boolean  @default(false)
+  createdAt      DateTime @default(now())
+
+  // Relations
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([userId])
+  @@index([isRead])
+}
+
+model AuditLog {
+  id             String   @id @default(uuid())
+  organizationId String
+  userId         String?
+  action         String   // e.g., "CREATE_PERMISSION", "APPROVE_PERMISSION"
+  details        String   // JSON string of activity details
+  ipAddress      String?
+  userAgent      String?
+  createdAt      DateTime @default(now())
+
+  // Relations
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId])
+  @@index([userId])
+  @@index([action])
+}

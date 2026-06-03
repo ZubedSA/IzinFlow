@@ -10,7 +10,7 @@ final userEmailProvider = StateProvider<String?>((ref) => null);
 
 final serverUrlProvider = StateProvider<String>((ref) {
   final prefs = ref.watch(sharedPreferencesProvider);
-  return prefs.getString('serverUrl') ?? 'http://localhost:3000/api/v1';
+  return prefs.getString('serverUrl') ?? 'https://izin-flow.vercel.app/api/v1';
 });
 
 final apiClientProvider = Provider<Dio>((ref) {

@@ -186,7 +186,7 @@ export class PermissionService implements OnModuleInit {
         console.log(`[APPROVE] Step 2: Creating ApprovalLog via raw SQL (teacherId=${teacherId})...`);
         const approvalLogId = require('crypto').randomUUID();
         await tx.$executeRawUnsafe(
-          `INSERT INTO "ApprovalLog" ("id", "permissionRequestId", "teacherId", "status", "note", "createdAt") VALUES ($1, $2, $3, $4::\"PermissionStatus\", $5, NOW())`,
+          `INSERT INTO "ApprovalLog" ("id", "permissionRequestId", "teacherId", "status", "note", "createdAt") VALUES ($1, $2, $3::uuid, $4::"PermissionStatus", $5::text, NOW())`,
           approvalLogId,
           id,
           teacherId,  // null for ORG_ADMIN, valid ID for TEACHER
@@ -295,7 +295,7 @@ export class PermissionService implements OnModuleInit {
 
       const approvalLogId = require('crypto').randomUUID();
       await tx.$executeRawUnsafe(
-        `INSERT INTO "ApprovalLog" ("id", "permissionRequestId", "teacherId", "status", "note", "createdAt") VALUES ($1, $2, $3, $4::\"PermissionStatus\", $5, NOW())`,
+        `INSERT INTO "ApprovalLog" ("id", "permissionRequestId", "teacherId", "status", "note", "createdAt") VALUES ($1, $2, $3::uuid, $4::"PermissionStatus", $5::text, NOW())`,
         approvalLogId,
         id,
         teacherId,  // null for ORG_ADMIN, valid ID for TEACHER

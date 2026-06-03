@@ -1,6 +1,8 @@
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
 import { RegisterOrgDto } from './dto/register-org.dto';
+import { UpdateProfileDto } from './dto/update-profile.dto';
+import { ChangePasswordDto } from './dto/change-password.dto';
 export declare class AuthController {
     private readonly authService;
     constructor(authService: AuthService);
@@ -25,6 +27,39 @@ export declare class AuthController {
         message: string;
         organizationId: string;
         slug: string;
+    }>;
+    getProfile(req: any): Promise<{
+        id: string;
+        email: string;
+        fullName: string;
+        role: import(".prisma/client").$Enums.UserRole;
+        avatarUrl: string;
+        isActive: boolean;
+        createdAt: Date;
+        updatedAt: Date;
+        organization: {
+            id: string;
+            name: string;
+            slug: string;
+            logoUrl: string;
+            brandColor: string;
+            address: string;
+            contact: string;
+            createdAt: Date;
+        };
+    }>;
+    updateProfile(req: any, dto: UpdateProfileDto): Promise<{
+        message: string;
+        user: {
+            id: string;
+            email: string;
+            fullName: string;
+            avatarUrl: string;
+            role: import(".prisma/client").$Enums.UserRole;
+        };
+    }>;
+    changePassword(req: any, dto: ChangePasswordDto): Promise<{
+        message: string;
     }>;
     createClassroom(tenantId: string, dto: any): Promise<{
         id: string;

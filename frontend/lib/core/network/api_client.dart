@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../providers/storage_provider.dart';
 
 // Providers for tracking JWT active session and Tenant Context
 final tenantIdProvider = StateProvider<String?>((ref) => null);
@@ -7,10 +8,16 @@ final authTokenProvider = StateProvider<String?>((ref) => null);
 final userFullNameProvider = StateProvider<String?>((ref) => null);
 final userEmailProvider = StateProvider<String?>((ref) => null);
 
+final serverUrlProvider = StateProvider<String>((ref) {
+  final prefs = ref.watch(sharedPreferencesProvider);
+  return prefs.getString('serverUrl') ?? 'http://localhost:3000/api/v1';
+});
+
 final apiClientProvider = Provider<Dio>((ref) {
+  final baseUrl = ref.watch(serverUrlProvider);
   final dio = Dio(
     BaseOptions(
-      baseUrl: 'http://localhost:3000/api/v1',
+      baseUrl: baseUrl,
       connectTimeout: const Duration(seconds: 10),
       receiveTimeout: const Duration(seconds: 10),
       headers: {

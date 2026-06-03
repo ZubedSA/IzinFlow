@@ -1,4 +1,4 @@
-import { Controller, Get, Put, Body, UseGuards, Request, Post, Res } from '@nestjs/common';
+import { Controller, Get, Put, Body, UseGuards, Request, Post, Res, Query } from '@nestjs/common';
 import { OrganizationService } from './organization.service';
 import { UpdateOrgSettingsDto } from './dto/update-settings.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
@@ -44,4 +44,12 @@ export class OrganizationController {
 
     res.end(pdfBuffer);
   }
+
+  @Get('audit-logs')
+  @Roles(UserRole.ORG_ADMIN)
+  async getAuditLogs(@Request() req: any, @Query('limit') limit?: string) {
+    const parsedLimit = limit ? parseInt(limit, 10) : 20;
+    return this.organizationService.getAuditLogs(req.user.organizationId, parsedLimit);
+  }
 }
+

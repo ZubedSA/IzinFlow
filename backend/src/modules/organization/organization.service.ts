@@ -81,4 +81,23 @@ export class OrganizationService {
       };
     });
   }
+
+  async getAuditLogs(organizationId: string, limit = 20) {
+    return this.prisma.auditLog.findMany({
+      where: { organizationId },
+      orderBy: { createdAt: 'desc' },
+      take: limit,
+      include: {
+        user: {
+          select: {
+            id: true,
+            fullName: true,
+            email: true,
+            role: true,
+            avatarUrl: true,
+          },
+        },
+      },
+    });
+  }
 }

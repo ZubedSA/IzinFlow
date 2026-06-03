@@ -46,4 +46,22 @@ export declare class OrganizationController {
         template: any;
     }>;
     previewSettings(req: any, dto: UpdateOrgSettingsDto, res: Response): Promise<void>;
+    getAuditLogs(req: any, limit?: string): Promise<({
+        user: {
+            id: string;
+            email: string;
+            role: import(".prisma/client").$Enums.UserRole;
+            fullName: string;
+            avatarUrl: string;
+        };
+    } & {
+        id: string;
+        createdAt: Date;
+        organizationId: string;
+        userId: string | null;
+        action: string;
+        details: string;
+        ipAddress: string | null;
+        userAgent: string | null;
+    })[]>;
 }

@@ -166,7 +166,7 @@ let PermissionService = class PermissionService {
                 });
                 console.log(`[APPROVE] Step 2: Creating ApprovalLog via raw SQL (teacherId=${teacherId})...`);
                 const approvalLogId = require('crypto').randomUUID();
-                await tx.$executeRawUnsafe(`INSERT INTO "ApprovalLog" ("id", "permissionRequestId", "teacherId", "status", "note", "createdAt") VALUES ($1, $2, $3, $4::\"PermissionStatus\", $5, NOW())`, approvalLogId, id, teacherId, client_1.PermissionStatus.APPROVED, dto.note || null);
+                await tx.$executeRawUnsafe(`INSERT INTO "ApprovalLog" ("id", "permissionRequestId", "teacherId", "status", "note", "createdAt") VALUES ($1, $2, $3::uuid, $4::"PermissionStatus", $5::text, NOW())`, approvalLogId, id, teacherId, client_1.PermissionStatus.APPROVED, dto.note || null);
                 const logId = approvalLogId;
                 console.log(`[APPROVE] Step 2 done: approvalLogId=${logId}`);
                 const uniqueSuffix = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
@@ -254,7 +254,7 @@ let PermissionService = class PermissionService {
                 data: { status: client_1.PermissionStatus.REJECTED },
             });
             const approvalLogId = require('crypto').randomUUID();
-            await tx.$executeRawUnsafe(`INSERT INTO "ApprovalLog" ("id", "permissionRequestId", "teacherId", "status", "note", "createdAt") VALUES ($1, $2, $3, $4::\"PermissionStatus\", $5, NOW())`, approvalLogId, id, teacherId, client_1.PermissionStatus.REJECTED, dto.note || null);
+            await tx.$executeRawUnsafe(`INSERT INTO "ApprovalLog" ("id", "permissionRequestId", "teacherId", "status", "note", "createdAt") VALUES ($1, $2, $3::uuid, $4::"PermissionStatus", $5::text, NOW())`, approvalLogId, id, teacherId, client_1.PermissionStatus.REJECTED, dto.note || null);
             const logId = approvalLogId;
             await tx.notification.create({
                 data: {

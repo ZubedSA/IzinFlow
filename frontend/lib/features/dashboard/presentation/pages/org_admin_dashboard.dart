@@ -79,6 +79,33 @@ class _OrgAdminDashboardState extends ConsumerState<OrgAdminDashboard> {
   final _teacherSearchController = TextEditingController();
   final _studentSearchController = TextEditingController();
 
+  // Profile / Account Settings State
+  Map<String, dynamic>? _profileData;
+  bool _isProfileLoading = false;
+  final _profileFormKey = GlobalKey<FormState>();
+  final _profileNameController = TextEditingController();
+  final _profileEmailController = TextEditingController();
+
+  // Change Password State
+  final _passwordFormKey = GlobalKey<FormState>();
+  final _oldPasswordController = TextEditingController();
+  final _newPasswordController = TextEditingController();
+  final _confirmPasswordController = TextEditingController();
+  bool _isPasswordLoading = false;
+  bool _obscureOldPass = true;
+  bool _obscureNewPass = true;
+  bool _obscureConfirmPass = true;
+
+  // Org Settings State
+  List<dynamic> _auditLogs = [];
+  bool _isAuditLoading = false;
+  final _orgSettingsFormKey = GlobalKey<FormState>();
+  final _orgSettingsNameController = TextEditingController();
+  final _orgSettingsAddressController = TextEditingController();
+  final _orgSettingsContactController = TextEditingController();
+  final _orgSettingsLogoUrlController = TextEditingController();
+  bool _isOrgSettingsLoading = false;
+
   @override
   void initState() {
     super.initState();
@@ -89,6 +116,8 @@ class _OrgAdminDashboardState extends ConsumerState<OrgAdminDashboard> {
       _fetchData();
       _fetchDirectoryData();
       _fetchPermissions();
+      _fetchProfile();
+      _fetchAuditLogs();
     });
   }
 
@@ -113,6 +142,16 @@ class _OrgAdminDashboardState extends ConsumerState<OrgAdminDashboard> {
     _classSearchController.dispose();
     _teacherSearchController.dispose();
     _studentSearchController.dispose();
+
+    _profileNameController.dispose();
+    _profileEmailController.dispose();
+    _oldPasswordController.dispose();
+    _newPasswordController.dispose();
+    _confirmPasswordController.dispose();
+    _orgSettingsNameController.dispose();
+    _orgSettingsAddressController.dispose();
+    _orgSettingsContactController.dispose();
+    _orgSettingsLogoUrlController.dispose();
     super.dispose();
   }
 
@@ -254,6 +293,8 @@ class _OrgAdminDashboardState extends ConsumerState<OrgAdminDashboard> {
             style: ElevatedButton.styleFrom(
               backgroundColor: action == 'approve' ? Colors.green : Colors.red,
               foregroundColor: Colors.white,
+              minimumSize: const Size(100, 36),
+              padding: const EdgeInsets.symmetric(horizontal: 16),
             ),
             onPressed: () {
               Navigator.pop(ctx);
@@ -475,11 +516,6 @@ class _OrgAdminDashboardState extends ConsumerState<OrgAdminDashboard> {
         options: Options(responseType: ResponseType.bytes),
       );
 
-      // In Flutter Web this could create a blob URL, but for native/general we can just save it or show it.
-      // Since it's web, we can use dart:html, but we don't have it imported.
-      // So instead, we'll inform the user that it downloaded or we could launch it.
-      // Wait, without dart:html, we can't easily preview it instantly on Web from bytes.
-      // Let's just download it as a byte preview or show a message.
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -497,8 +533,161 @@ class _OrgAdminDashboardState extends ConsumerState<OrgAdminDashboard> {
     }
   }
 
+  // --- PROFILE & ACCOUNT SETTINGS ---
+
+  Future<void> _fetchProfile() async {
+    setState(() => _isProfileLoading = true);
+    try {
+      final dio = ref.read(apiClientProvider);
+      final response = await dio.get('/auth/profile');
+      if (response.statusCode == 200 && mounted) {
+        setState(() {
+          _profileData = response.data as Map<String, dynamic>;
+          _profileNameController.text = _profileData!['fullName'] ?? '';
+          _profileEmailController.text = _profileData!['email'] ?? '';
+
+          // Also populate org settings controllers
+          final org = _profileData!['organization'];
+          if (org != null) {
+            _orgSettingsNameController.text = org['name'] ?? '';
+            _orgSettingsAddressController.text = org['address'] ?? '';
+            _orgSettingsContactController.text = org['contact'] ?? '';
+            _orgSettingsLogoUrlController.text = org['logoUrl'] ?? '';
+          }
+        });
+      }
+    } catch (e) {
+      // Silently handle - profile data is supplementary
+    } finally {
+      if (mounted) setState(() => _isProfileLoading = false);
+    }
+  }
+
+  Future<void> _submitProfileUpdate() async {
+    if (!_profileFormKey.currentState!.validate()) return;
+    setState(() => _isProfileLoading = true);
+    try {
+      final dio = ref.read(apiClientProvider);
+      final response = await dio.put('/auth/profile', data: {
+        'fullName': _profileNameController.text,
+        'email': _profileEmailController.text,
+      });
+      if (mounted) {
+        final updatedUser = response.data['user'];
+        if (updatedUser != null) {
+          ref.read(userFullNameProvider.notifier).state = updatedUser['fullName'];
+          ref.read(userEmailProvider.notifier).state = updatedUser['email'];
+          // Also update local storage
+          final storage = ref.read(localAuthStorageProvider);
+          await storage.saveAuthData(
+            token: ref.read(authTokenProvider) ?? '',
+            tenantId: ref.read(tenantIdProvider) ?? '',
+            role: ref.read(userRoleProvider) ?? '',
+            fullName: updatedUser['fullName'] ?? '',
+            email: updatedUser['email'] ?? '',
+          );
+        }
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Profil berhasil diperbarui!'), backgroundColor: Colors.green),
+        );
+        _fetchProfile();
+      }
+    } catch (e) {
+      if (mounted) {
+        String errorMsg = 'Gagal memperbarui profil.';
+        if (e is DioException && e.response?.data != null) {
+          errorMsg = e.response?.data['message'] ?? errorMsg;
+        }
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(errorMsg), backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isProfileLoading = false);
+    }
+  }
+
+  Future<void> _submitPasswordChange() async {
+    if (!_passwordFormKey.currentState!.validate()) return;
+    setState(() => _isPasswordLoading = true);
+    try {
+      final dio = ref.read(apiClientProvider);
+      await dio.put('/auth/change-password', data: {
+        'oldPassword': _oldPasswordController.text,
+        'newPassword': _newPasswordController.text,
+      });
+      if (mounted) {
+        _oldPasswordController.clear();
+        _newPasswordController.clear();
+        _confirmPasswordController.clear();
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Password berhasil diubah!'), backgroundColor: Colors.green),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        String errorMsg = 'Gagal mengubah password.';
+        if (e is DioException && e.response?.data != null) {
+          errorMsg = e.response?.data['message'] ?? errorMsg;
+        }
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(errorMsg), backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isPasswordLoading = false);
+    }
+  }
+
+  // --- AUDIT LOGS ---
+
+  Future<void> _fetchAuditLogs() async {
+    setState(() => _isAuditLoading = true);
+    try {
+      final dio = ref.read(apiClientProvider);
+      final response = await dio.get('/organizations/audit-logs?limit=15');
+      if (response.statusCode == 200 && mounted) {
+        setState(() => _auditLogs = response.data as List<dynamic>);
+      }
+    } catch (e) {
+      // Silently handle
+    } finally {
+      if (mounted) setState(() => _isAuditLoading = false);
+    }
+  }
+
+  Future<void> _submitOrgSettingsUpdate() async {
+    if (!_orgSettingsFormKey.currentState!.validate()) return;
+    setState(() => _isOrgSettingsLoading = true);
+    try {
+      final dio = ref.read(apiClientProvider);
+      await dio.put('/organizations/settings', data: {
+        'name': _orgSettingsNameController.text,
+        'address': _orgSettingsAddressController.text,
+        'contact': _orgSettingsContactController.text,
+        'logoUrl': _orgSettingsLogoUrlController.text,
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Pengaturan lembaga berhasil disimpan!'), backgroundColor: Colors.green),
+        );
+        _fetchProfile(); // Refresh org data
+        _fetchData();
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Gagal menyimpan pengaturan lembaga.'), backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isOrgSettingsLoading = false);
+    }
+  }
+
   Future<void> _previewPDF(String permissionId) async {
-    final url = Uri.parse('http://localhost:3000/api/v1/letters/$permissionId/download');
+    final baseUrl = ref.read(serverUrlProvider);
+    final url = Uri.parse('$baseUrl/letters/$permissionId/download');
     if (await canLaunchUrl(url)) {
       await launchUrl(url, mode: LaunchMode.externalApplication);
     } else {
@@ -1375,6 +1564,10 @@ class _OrgAdminDashboardState extends ConsumerState<OrgAdminDashboard> {
                                       ),
                                       const SizedBox(width: 8),
                                       ElevatedButton.icon(
+                                        style: ElevatedButton.styleFrom(
+                                          minimumSize: const Size(100, 36),
+                                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                                        ),
                                         icon: const Icon(Icons.check_rounded, size: 18),
                                         label: const Text('Setujui'),
                                         onPressed: () => _showNoteDialog(permit['id'], 'approve'),
@@ -1464,59 +1657,874 @@ class _OrgAdminDashboardState extends ConsumerState<OrgAdminDashboard> {
     if (mounted) context.go('/login');
   }
   Widget _buildAccountSettingsTab(bool isDesktop, ThemeData theme) {
-    return Padding(
+    final userName = _profileData?['fullName'] ?? ref.watch(userFullNameProvider) ?? 'User';
+    final userEmail = _profileData?['email'] ?? ref.watch(userEmailProvider) ?? '';
+    final userRole = _profileData?['role'] ?? ref.watch(userRoleProvider) ?? 'ORG_ADMIN';
+    final createdAt = _profileData?['createdAt'] != null
+        ? DateTime.parse(_profileData!['createdAt']).toLocal()
+        : null;
+    final orgName = _profileData?['organization']?['name'] ?? '';
+
+    // Generate initials
+    final nameParts = userName.toString().split(' ');
+    final initials = nameParts.length > 1
+        ? '${nameParts[0][0]}${nameParts[1][0]}'.toUpperCase()
+        : (nameParts.isNotEmpty && nameParts[0].isNotEmpty ? nameParts[0][0].toUpperCase() : '?');
+
+    String roleBadgeText = 'Admin Lembaga';
+    Color roleBadgeColor = theme.colorScheme.primary;
+    if (userRole == 'SUPER_ADMIN') {
+      roleBadgeText = 'Super Admin';
+      roleBadgeColor = Colors.deepPurple;
+    } else if (userRole == 'TEACHER') {
+      roleBadgeText = 'Guru';
+      roleBadgeColor = Colors.teal;
+    } else if (userRole == 'STUDENT') {
+      roleBadgeText = 'Siswa';
+      roleBadgeColor = Colors.blue;
+    }
+
+    return SingleChildScrollView(
       padding: EdgeInsets.all(isDesktop ? 32.0 : 16.0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Pengaturan Akun', style: theme.textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.bold, color: theme.colorScheme.primary)),
-          const SizedBox(height: 4),
-          Text('Kelola informasi profil dan keamanan akun Anda.', style: TextStyle(color: Colors.grey.shade600)),
-          const SizedBox(height: 32),
-          Expanded(
-            child: Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
+          if (isDesktop) ...[
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Pengaturan Akun', style: theme.textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.bold, color: theme.colorScheme.primary)),
+                      const SizedBox(height: 4),
+                      Text('Kelola informasi profil dan keamanan akun Anda.', style: TextStyle(color: Colors.grey.shade600)),
+                    ],
+                  ),
+                ),
+                IconButton.filledTonal(
+                  icon: const Icon(Icons.refresh_rounded),
+                  onPressed: _isProfileLoading ? null : _fetchProfile,
+                ),
+              ],
+            ),
+            const SizedBox(height: 24),
+          ],
+
+          // === PROFILE CARD ===
+          Card(
+            elevation: 0,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+              side: BorderSide(color: theme.colorScheme.primary.withOpacity(0.15)),
+            ),
+            child: Container(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(20),
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    theme.colorScheme.primary.withOpacity(0.05),
+                    theme.colorScheme.primaryContainer.withOpacity(0.08),
+                  ],
+                ),
+              ),
+              padding: EdgeInsets.all(isDesktop ? 28 : 20),
+              child: Row(
                 children: [
-                  Icon(Icons.manage_accounts_rounded, size: 64, color: Colors.grey.shade400),
-                  const SizedBox(height: 16),
-                  Text('Segera Hadir', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.grey.shade600)),
-                  const SizedBox(height: 8),
-                  Text('Fitur pengaturan akun sedang dalam pengembangan.', style: TextStyle(color: Colors.grey.shade500)),
+                  Container(
+                    width: isDesktop ? 80 : 64,
+                    height: isDesktop ? 80 : 64,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      gradient: LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: [
+                          theme.colorScheme.primary,
+                          theme.colorScheme.primary.withOpacity(0.7),
+                        ],
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: theme.colorScheme.primary.withOpacity(0.3),
+                          blurRadius: 16,
+                          offset: const Offset(0, 6),
+                        ),
+                      ],
+                    ),
+                    child: Center(
+                      child: Text(
+                        initials,
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: isDesktop ? 28 : 22,
+                        ),
+                      ),
+                    ),
+                  ),
+                  SizedBox(width: isDesktop ? 24 : 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          userName,
+                          style: TextStyle(
+                            fontSize: isDesktop ? 22 : 18,
+                            fontWeight: FontWeight.bold,
+                            color: theme.colorScheme.onSurface,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                          maxLines: 1,
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          userEmail,
+                          style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
+                          overflow: TextOverflow.ellipsis,
+                          maxLines: 1,
+                        ),
+                        const SizedBox(height: 8),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 4,
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: roleBadgeColor.withOpacity(0.1),
+                                borderRadius: BorderRadius.circular(20),
+                                border: Border.all(color: roleBadgeColor.withOpacity(0.3)),
+                              ),
+                              child: Text(
+                                roleBadgeText,
+                                style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: roleBadgeColor),
+                              ),
+                            ),
+                            if (orgName.isNotEmpty)
+                              Container(
+                                constraints: BoxConstraints(maxWidth: isDesktop ? 250 : 180),
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: Colors.grey.shade100,
+                                  borderRadius: BorderRadius.circular(20),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(Icons.domain_rounded, size: 12, color: Colors.grey.shade600),
+                                    const SizedBox(width: 4),
+                                    Flexible(
+                                      child: Text(
+                                        orgName,
+                                        style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                                        overflow: TextOverflow.ellipsis,
+                                        maxLines: 1,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            if (createdAt != null)
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: Colors.grey.shade100,
+                                  borderRadius: BorderRadius.circular(20),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(Icons.calendar_today_rounded, size: 12, color: Colors.grey.shade600),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      'Bergabung ${createdAt.day}/${createdAt.month}/${createdAt.year}',
+                                      style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
                 ],
               ),
             ),
           ),
+          const SizedBox(height: 24),
+
+          // === EDIT PROFILE SECTION ===
+          Card(
+            elevation: 0,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+              side: BorderSide(color: Colors.grey.shade200),
+            ),
+            child: Padding(
+              padding: EdgeInsets.all(isDesktop ? 24.0 : 16.0),
+              child: Form(
+                key: _profileFormKey,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(Icons.edit_rounded, color: theme.colorScheme.primary, size: 22),
+                        const SizedBox(width: 8),
+                        Text('Edit Profil', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    Text('Perbarui informasi dasar akun Anda.', style: TextStyle(fontSize: 13, color: Colors.grey.shade600)),
+                    const SizedBox(height: 20),
+                    TextFormField(
+                      controller: _profileNameController,
+                      decoration: InputDecoration(
+                        labelText: 'Nama Lengkap',
+                        prefixIcon: const Icon(Icons.person_rounded),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                      validator: (v) => v == null || v.trim().isEmpty ? 'Nama wajib diisi' : null,
+                    ),
+                    const SizedBox(height: 16),
+                    TextFormField(
+                      controller: _profileEmailController,
+                      decoration: InputDecoration(
+                        labelText: 'Alamat Email',
+                        prefixIcon: const Icon(Icons.email_rounded),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                      validator: (v) => v == null || !v.contains('@') ? 'Email tidak valid' : null,
+                    ),
+                    const SizedBox(height: 20),
+                    SizedBox(
+                      width: isDesktop ? 200 : double.infinity,
+                      height: 48,
+                      child: ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: theme.colorScheme.primary,
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          elevation: 0,
+                        ),
+                        onPressed: _isProfileLoading ? null : _submitProfileUpdate,
+                        icon: _isProfileLoading
+                            ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                            : const Icon(Icons.save_rounded, size: 18),
+                        label: const Text('Simpan Profil', style: TextStyle(fontWeight: FontWeight.bold)),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 24),
+
+          // === CHANGE PASSWORD SECTION ===
+          Card(
+            elevation: 0,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+              side: BorderSide(color: Colors.orange.shade100),
+            ),
+            child: Padding(
+              padding: EdgeInsets.all(isDesktop ? 24.0 : 16.0),
+              child: Form(
+                key: _passwordFormKey,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(Icons.lock_rounded, color: Colors.orange.shade700, size: 22),
+                        const SizedBox(width: 8),
+                        Text('Ubah Password', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    Text('Ganti password akun Anda. Pastikan password baru yang kuat.', style: TextStyle(fontSize: 13, color: Colors.grey.shade600)),
+                    const SizedBox(height: 20),
+                    TextFormField(
+                      controller: _oldPasswordController,
+                      obscureText: _obscureOldPass,
+                      decoration: InputDecoration(
+                        labelText: 'Password Lama',
+                        prefixIcon: const Icon(Icons.lock_outline_rounded),
+                        suffixIcon: IconButton(
+                          icon: Icon(_obscureOldPass ? Icons.visibility_off_rounded : Icons.visibility_rounded),
+                          onPressed: () => setState(() => _obscureOldPass = !_obscureOldPass),
+                        ),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                      validator: (v) => v == null || v.isEmpty ? 'Password lama wajib diisi' : null,
+                    ),
+                    const SizedBox(height: 16),
+                    TextFormField(
+                      controller: _newPasswordController,
+                      obscureText: _obscureNewPass,
+                      decoration: InputDecoration(
+                        labelText: 'Password Baru',
+                        prefixIcon: const Icon(Icons.lock_rounded),
+                        suffixIcon: IconButton(
+                          icon: Icon(_obscureNewPass ? Icons.visibility_off_rounded : Icons.visibility_rounded),
+                          onPressed: () => setState(() => _obscureNewPass = !_obscureNewPass),
+                        ),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                      validator: (v) {
+                        if (v == null || v.isEmpty) return 'Password baru wajib diisi';
+                        if (v.length < 6) return 'Password minimal 6 karakter';
+                        return null;
+                      },
+                    ),
+                    const SizedBox(height: 16),
+                    TextFormField(
+                      controller: _confirmPasswordController,
+                      obscureText: _obscureConfirmPass,
+                      decoration: InputDecoration(
+                        labelText: 'Konfirmasi Password Baru',
+                        prefixIcon: const Icon(Icons.lock_reset_rounded),
+                        suffixIcon: IconButton(
+                          icon: Icon(_obscureConfirmPass ? Icons.visibility_off_rounded : Icons.visibility_rounded),
+                          onPressed: () => setState(() => _obscureConfirmPass = !_obscureConfirmPass),
+                        ),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                      validator: (v) {
+                        if (v == null || v.isEmpty) return 'Konfirmasi password wajib diisi';
+                        if (v != _newPasswordController.text) return 'Password tidak cocok';
+                        return null;
+                      },
+                    ),
+                    const SizedBox(height: 20),
+                    SizedBox(
+                      width: isDesktop ? 200 : double.infinity,
+                      height: 48,
+                      child: ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.orange.shade700,
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          elevation: 0,
+                        ),
+                        onPressed: _isPasswordLoading ? null : _submitPasswordChange,
+                        icon: _isPasswordLoading
+                            ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                            : const Icon(Icons.vpn_key_rounded, size: 18),
+                        label: const Text('Ubah Password', style: TextStyle(fontWeight: FontWeight.bold)),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 24),
+
+          // === SESSION & DANGER ZONE ===
+          Card(
+            elevation: 0,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+              side: BorderSide(color: Colors.red.shade100),
+            ),
+            child: Padding(
+              padding: EdgeInsets.all(isDesktop ? 24.0 : 16.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(Icons.warning_amber_rounded, color: Colors.red.shade600, size: 22),
+                      const SizedBox(width: 8),
+                      Text('Zona Berbahaya', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold, color: Colors.red.shade700)),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Text('Tindakan ini tidak dapat dibatalkan.', style: TextStyle(fontSize: 13, color: Colors.grey.shade600)),
+                  const SizedBox(height: 20),
+                  SizedBox(
+                    width: isDesktop ? 200 : double.infinity,
+                    height: 48,
+                    child: OutlinedButton.icon(
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.red,
+                        side: const BorderSide(color: Colors.red),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                      onPressed: _handleLogout,
+                      icon: const Icon(Icons.logout_rounded, size: 18),
+                      label: const Text('Keluar dari Akun', style: TextStyle(fontWeight: FontWeight.bold)),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 32),
         ],
       ),
     );
   }
 
   Widget _buildOrgSettingsTab(bool isDesktop, ThemeData theme) {
-    return Padding(
+    final org = _profileData?['organization'];
+    final orgName = org?['name'] ?? '';
+    final orgSlug = org?['slug'] ?? '';
+    final orgCreatedAt = org?['createdAt'] != null ? DateTime.parse(org!['createdAt']).toLocal() : null;
+    final orgLogoUrl = org?['logoUrl'] ?? '';
+
+    return SingleChildScrollView(
       padding: EdgeInsets.all(isDesktop ? 32.0 : 16.0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Pengaturan Lembaga', style: theme.textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.bold, color: theme.colorScheme.primary)),
-          const SizedBox(height: 4),
-          Text('Kelola informasi dan preferensi institusi Anda.', style: TextStyle(color: Colors.grey.shade600)),
-          const SizedBox(height: 32),
-          Expanded(
-            child: Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
+          if (isDesktop) ...[
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Pengaturan Lembaga', style: theme.textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.bold, color: theme.colorScheme.primary)),
+                      const SizedBox(height: 4),
+                      Text('Kelola informasi dan preferensi institusi Anda.', style: TextStyle(color: Colors.grey.shade600)),
+                    ],
+                  ),
+                ),
+                IconButton.filledTonal(
+                  icon: const Icon(Icons.refresh_rounded),
+                  onPressed: _isOrgSettingsLoading ? null : () {
+                    _fetchProfile();
+                    _fetchAuditLogs();
+                  },
+                ),
+              ],
+            ),
+            const SizedBox(height: 24),
+          ],
+
+          // === ORG PROFILE CARD ===
+          Card(
+            elevation: 0,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+              side: BorderSide(color: theme.colorScheme.primary.withOpacity(0.15)),
+            ),
+            child: Container(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(20),
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    theme.colorScheme.primary.withOpacity(0.04),
+                    theme.colorScheme.primaryContainer.withOpacity(0.06),
+                  ],
+                ),
+              ),
+              padding: EdgeInsets.all(isDesktop ? 28 : 20),
+              child: Row(
                 children: [
-                  Icon(Icons.domain_rounded, size: 64, color: Colors.grey.shade400),
-                  const SizedBox(height: 16),
-                  Text('Segera Hadir', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.grey.shade600)),
-                  const SizedBox(height: 8),
-                  Text('Fitur pengaturan lembaga sedang dalam pengembangan.', style: TextStyle(color: Colors.grey.shade500)),
+                  Container(
+                    width: isDesktop ? 72 : 56,
+                    height: isDesktop ? 72 : 56,
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.primary.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: orgLogoUrl.isNotEmpty
+                        ? ClipRRect(
+                            borderRadius: BorderRadius.circular(16),
+                            child: Image.network(
+                              orgLogoUrl,
+                              fit: BoxFit.cover,
+                              errorBuilder: (_, __, ___) => Icon(Icons.domain_rounded, size: 32, color: theme.colorScheme.primary),
+                            ),
+                          )
+                        : Icon(Icons.domain_rounded, size: 32, color: theme.colorScheme.primary),
+                  ),
+                  SizedBox(width: isDesktop ? 24 : 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          orgName.isEmpty ? 'Lembaga' : orgName,
+                          style: TextStyle(
+                            fontSize: isDesktop ? 22 : 18,
+                            fontWeight: FontWeight.bold,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                          maxLines: 2,
+                        ),
+                        const SizedBox(height: 6),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 4,
+                          children: [
+                            if (orgSlug.isNotEmpty)
+                              Container(
+                                constraints: BoxConstraints(maxWidth: isDesktop ? 200 : 140),
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: Colors.grey.shade100,
+                                  borderRadius: BorderRadius.circular(20),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(Icons.link_rounded, size: 12, color: Colors.grey.shade600),
+                                    const SizedBox(width: 4),
+                                    Flexible(
+                                      child: Text(orgSlug, style: TextStyle(fontSize: 11, color: Colors.grey.shade600, fontWeight: FontWeight.w500), overflow: TextOverflow.ellipsis),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: Colors.green.shade50,
+                                borderRadius: BorderRadius.circular(20),
+                                border: Border.all(color: Colors.green.shade200),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(Icons.check_circle_rounded, size: 12, color: Colors.green.shade700),
+                                  const SizedBox(width: 4),
+                                  Text('Aktif', style: TextStyle(fontSize: 11, color: Colors.green.shade700, fontWeight: FontWeight.w600)),
+                                ],
+                              ),
+                            ),
+                            if (orgCreatedAt != null)
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: Colors.grey.shade100,
+                                  borderRadius: BorderRadius.circular(20),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(Icons.calendar_today_rounded, size: 12, color: Colors.grey.shade600),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      'Sejak ${orgCreatedAt.day}/${orgCreatedAt.month}/${orgCreatedAt.year}',
+                                      style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
                 ],
               ),
             ),
           ),
+          const SizedBox(height: 24),
+
+          // === STATISTICS SUMMARY ===
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final int crossAxisCount = isDesktop ? 4 : 2;
+              final double cardWidth = (constraints.maxWidth - ((crossAxisCount - 1) * 12)) / crossAxisCount;
+              return Wrap(
+                spacing: 12,
+                runSpacing: 12,
+                children: [
+                  SizedBox(
+                    width: cardWidth,
+                    child: _buildMiniStatCard(Icons.people_rounded, 'Siswa', _stats['totalStudents'].toString(), Colors.blue, theme),
+                  ),
+                  SizedBox(
+                    width: cardWidth,
+                    child: _buildMiniStatCard(Icons.school_rounded, 'Guru', _stats['totalTeachers'].toString(), Colors.teal, theme),
+                  ),
+                  SizedBox(
+                    width: cardWidth,
+                    child: _buildMiniStatCard(Icons.check_circle_rounded, 'Disetujui', _stats['approvedCount'].toString(), Colors.green, theme),
+                  ),
+                  SizedBox(
+                    width: cardWidth,
+                    child: _buildMiniStatCard(Icons.pending_rounded, 'Pending', _stats['pendingCount'].toString(), Colors.orange, theme),
+                  ),
+                ],
+              );
+            },
+          ),
+          const SizedBox(height: 24),
+
+          // === EDIT ORG SETTINGS ===
+          Card(
+            elevation: 0,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+              side: BorderSide(color: Colors.grey.shade200),
+            ),
+            child: Padding(
+              padding: EdgeInsets.all(isDesktop ? 24.0 : 16.0),
+              child: Form(
+                key: _orgSettingsFormKey,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(Icons.edit_note_rounded, color: theme.colorScheme.primary, size: 22),
+                        const SizedBox(width: 8),
+                        Text('Informasi Lembaga', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    Text('Perbarui data dasar dan kontak lembaga Anda.', style: TextStyle(fontSize: 13, color: Colors.grey.shade600)),
+                    const SizedBox(height: 20),
+                    TextFormField(
+                      controller: _orgSettingsNameController,
+                      decoration: InputDecoration(
+                        labelText: 'Nama Lembaga',
+                        prefixIcon: const Icon(Icons.domain_rounded),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                      validator: (v) => v == null || v.trim().isEmpty ? 'Nama lembaga wajib diisi' : null,
+                    ),
+                    const SizedBox(height: 16),
+                    TextFormField(
+                      controller: _orgSettingsAddressController,
+                      decoration: InputDecoration(
+                        labelText: 'Alamat',
+                        prefixIcon: const Icon(Icons.location_on_rounded),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    TextFormField(
+                      controller: _orgSettingsContactController,
+                      decoration: InputDecoration(
+                        labelText: 'Kontak (Telepon/WA)',
+                        prefixIcon: const Icon(Icons.phone_rounded),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    TextFormField(
+                      controller: _orgSettingsLogoUrlController,
+                      decoration: InputDecoration(
+                        labelText: 'URL Logo',
+                        prefixIcon: const Icon(Icons.image_rounded),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        helperText: 'Masukkan URL gambar logo lembaga (opsional)',
+                      ),
+                    ),
+                    if (_orgSettingsLogoUrlController.text.isNotEmpty) ...[
+                      const SizedBox(height: 16),
+                      Container(
+                        height: 80,
+                        width: 80,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.grey.shade300),
+                        ),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(12),
+                          child: Image.network(
+                            _orgSettingsLogoUrlController.text,
+                            fit: BoxFit.cover,
+                            errorBuilder: (_, __, ___) => Icon(Icons.broken_image_rounded, color: Colors.grey.shade400),
+                          ),
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: 24),
+                    SizedBox(
+                      width: isDesktop ? 240 : double.infinity,
+                      height: 48,
+                      child: ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: theme.colorScheme.primary,
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          elevation: 0,
+                        ),
+                        onPressed: _isOrgSettingsLoading ? null : _submitOrgSettingsUpdate,
+                        icon: _isOrgSettingsLoading
+                            ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                            : const Icon(Icons.save_rounded, size: 18),
+                        label: const Text('Simpan Pengaturan', style: TextStyle(fontWeight: FontWeight.bold)),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 24),
+
+          // === AUDIT LOG ===
+          Card(
+            elevation: 0,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+              side: BorderSide(color: Colors.grey.shade200),
+            ),
+            child: Padding(
+              padding: EdgeInsets.all(isDesktop ? 24.0 : 16.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(Icons.history_rounded, color: theme.colorScheme.primary, size: 22),
+                          const SizedBox(width: 8),
+                          Text('Aktivitas Terbaru', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+                        ],
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.refresh_rounded, size: 20),
+                        onPressed: _isAuditLoading ? null : _fetchAuditLogs,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Text('Log aktivitas terakhir di lembaga Anda.', style: TextStyle(fontSize: 13, color: Colors.grey.shade600)),
+                  const SizedBox(height: 16),
+                  if (_isAuditLoading)
+                    const Center(child: Padding(padding: EdgeInsets.all(24), child: CircularProgressIndicator()))
+                  else if (_auditLogs.isEmpty)
+                    Center(
+                      child: Padding(
+                        padding: const EdgeInsets.all(32),
+                        child: Column(
+                          children: [
+                            Icon(Icons.inbox_rounded, size: 48, color: Colors.grey.shade300),
+                            const SizedBox(height: 12),
+                            Text('Belum ada aktivitas tercatat.', style: TextStyle(color: Colors.grey.shade500)),
+                          ],
+                        ),
+                      ),
+                    )
+                  else
+                    ListView.separated(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      itemCount: _auditLogs.length,
+                      separatorBuilder: (_, __) => Divider(height: 1, color: Colors.grey.shade100),
+                      itemBuilder: (context, index) {
+                        final log = _auditLogs[index];
+                        final user = log['user'];
+                        final userName = user?['fullName'] ?? 'System';
+                        final action = log['action'] ?? '';
+                        final createdAt = DateTime.parse(log['createdAt']).toLocal();
+                        final timeAgo = DateTime.now().difference(createdAt);
+                        String timeStr;
+                        if (timeAgo.inMinutes < 1) {
+                          timeStr = 'Baru saja';
+                        } else if (timeAgo.inMinutes < 60) {
+                          timeStr = '${timeAgo.inMinutes} menit lalu';
+                        } else if (timeAgo.inHours < 24) {
+                          timeStr = '${timeAgo.inHours} jam lalu';
+                        } else {
+                          timeStr = '${timeAgo.inDays} hari lalu';
+                        }
+
+                        IconData actionIcon = Icons.info_rounded;
+                        Color actionColor = Colors.grey;
+                        if (action.contains('APPROVE')) {
+                          actionIcon = Icons.check_circle_rounded;
+                          actionColor = Colors.green;
+                        } else if (action.contains('REJECT')) {
+                          actionIcon = Icons.cancel_rounded;
+                          actionColor = Colors.red;
+                        } else if (action.contains('CREATE')) {
+                          actionIcon = Icons.add_circle_rounded;
+                          actionColor = Colors.blue;
+                        } else if (action.contains('UPDATE')) {
+                          actionIcon = Icons.edit_rounded;
+                          actionColor = Colors.orange;
+                        } else if (action.contains('DELETE')) {
+                          actionIcon = Icons.delete_rounded;
+                          actionColor = Colors.red;
+                        } else if (action.contains('LOGIN')) {
+                          actionIcon = Icons.login_rounded;
+                          actionColor = Colors.teal;
+                        }
+
+                        return ListTile(
+                          contentPadding: const EdgeInsets.symmetric(vertical: 4, horizontal: 4),
+                          leading: Container(
+                            width: 40,
+                            height: 40,
+                            decoration: BoxDecoration(
+                              color: actionColor.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Icon(actionIcon, color: actionColor, size: 20),
+                          ),
+                          title: Text(
+                            action.replaceAll('_', ' '),
+                            style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          subtitle: Text(
+                            'oleh $userName',
+                            style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                          ),
+                          trailing: Text(
+                            timeStr,
+                            style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
+                          ),
+                        );
+                      },
+                    ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 32),
         ],
+      ),
+    );
+  }
+
+  Widget _buildMiniStatCard(IconData icon, String label, String value, Color color, ThemeData theme) {
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(14),
+        side: BorderSide(color: color.withOpacity(0.15)),
+      ),
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(14),
+          color: color.withOpacity(0.04),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, color: color, size: 24),
+            const SizedBox(height: 8),
+            Text(value, style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: color)),
+            const SizedBox(height: 4),
+            Text(label, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: Colors.grey.shade600)),
+          ],
+        ),
       ),
     );
   }

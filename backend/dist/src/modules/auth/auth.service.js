@@ -263,6 +263,91 @@ let AuthService = class AuthService {
             return student;
         });
     }
+    async getProfile(userId) {
+        const user = await this.prisma.user.findUnique({
+            where: { id: userId },
+            include: {
+                organization: true,
+                studentProfile: { include: { classRoom: true } },
+                teacherProfile: true,
+            },
+        });
+        if (!user) {
+            throw new common_1.NotFoundException('User tidak ditemukan.');
+        }
+        return {
+            id: user.id,
+            email: user.email,
+            fullName: user.fullName,
+            role: user.role,
+            avatarUrl: user.avatarUrl,
+            isActive: user.isActive,
+            createdAt: user.createdAt,
+            updatedAt: user.updatedAt,
+            organization: {
+                id: user.organization.id,
+                name: user.organization.name,
+                slug: user.organization.slug,
+                logoUrl: user.organization.logoUrl,
+                brandColor: user.organization.brandColor,
+                address: user.organization.address,
+                contact: user.organization.contact,
+                createdAt: user.organization.createdAt,
+            },
+        };
+    }
+    async updateProfile(userId, dto) {
+        const user = await this.prisma.user.findUnique({ where: { id: userId } });
+        if (!user) {
+            throw new common_1.NotFoundException('User tidak ditemukan.');
+        }
+        if (dto.email && dto.email !== user.email) {
+            const existingUser = await this.prisma.user.findFirst({
+                where: {
+                    email: dto.email,
+                    organizationId: user.organizationId,
+                    id: { not: userId },
+                },
+            });
+            if (existingUser) {
+                throw new common_1.ConflictException('Email sudah digunakan oleh pengguna lain.');
+            }
+        }
+        const updatedUser = await this.prisma.user.update({
+            where: { id: userId },
+            data: {
+                ...(dto.fullName !== undefined ? { fullName: dto.fullName } : {}),
+                ...(dto.email !== undefined ? { email: dto.email } : {}),
+                ...(dto.avatarUrl !== undefined ? { avatarUrl: dto.avatarUrl } : {}),
+            },
+        });
+        return {
+            message: 'Profil berhasil diperbarui.',
+            user: {
+                id: updatedUser.id,
+                email: updatedUser.email,
+                fullName: updatedUser.fullName,
+                avatarUrl: updatedUser.avatarUrl,
+                role: updatedUser.role,
+            },
+        };
+    }
+    async changePassword(userId, oldPassword, newPassword) {
+        const user = await this.prisma.user.findUnique({ where: { id: userId } });
+        if (!user) {
+            throw new common_1.NotFoundException('User tidak ditemukan.');
+        }
+        const isOldPasswordValid = await bcrypt.compare(oldPassword, user.passwordHash);
+        if (!isOldPasswordValid) {
+            throw new common_1.BadRequestException('Password lama tidak sesuai.');
+        }
+        const newPasswordHash = await bcrypt.hash(newPassword, 10);
+        await this.prisma.user.update({
+            where: { id: userId },
+            data: { passwordHash: newPasswordHash },
+        });
+        return { message: 'Password berhasil diubah.' };
+    }
     async deleteOrganization(id) {
         return this.prisma.organization.update({
             where: { id },

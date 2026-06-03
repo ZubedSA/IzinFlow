@@ -205,6 +205,39 @@ export declare class AuthService {
         classRoomId: string;
         parentId: string | null;
     }>;
+    getProfile(userId: string): Promise<{
+        id: string;
+        email: string;
+        fullName: string;
+        role: import(".prisma/client").$Enums.UserRole;
+        avatarUrl: string;
+        isActive: boolean;
+        createdAt: Date;
+        updatedAt: Date;
+        organization: {
+            id: string;
+            name: string;
+            slug: string;
+            logoUrl: string;
+            brandColor: string;
+            address: string;
+            contact: string;
+            createdAt: Date;
+        };
+    }>;
+    updateProfile(userId: string, dto: any): Promise<{
+        message: string;
+        user: {
+            id: string;
+            email: string;
+            fullName: string;
+            avatarUrl: string;
+            role: import(".prisma/client").$Enums.UserRole;
+        };
+    }>;
+    changePassword(userId: string, oldPassword: string, newPassword: string): Promise<{
+        message: string;
+    }>;
     deleteOrganization(id: string): Promise<{
         id: string;
         isActive: boolean;

@@ -81,6 +81,24 @@ let OrganizationService = class OrganizationService {
             };
         });
     }
+    async getAuditLogs(organizationId, limit = 20) {
+        return this.prisma.auditLog.findMany({
+            where: { organizationId },
+            orderBy: { createdAt: 'desc' },
+            take: limit,
+            include: {
+                user: {
+                    select: {
+                        id: true,
+                        fullName: true,
+                        email: true,
+                        role: true,
+                        avatarUrl: true,
+                    },
+                },
+            },
+        });
+    }
 };
 exports.OrganizationService = OrganizationService;
 exports.OrganizationService = OrganizationService = __decorate([

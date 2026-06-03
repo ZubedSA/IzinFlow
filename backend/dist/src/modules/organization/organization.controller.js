@@ -43,6 +43,10 @@ let OrganizationController = class OrganizationController {
         });
         res.end(pdfBuffer);
     }
+    async getAuditLogs(req, limit) {
+        const parsedLimit = limit ? parseInt(limit, 10) : 20;
+        return this.organizationService.getAuditLogs(req.user.organizationId, parsedLimit);
+    }
 };
 exports.OrganizationController = OrganizationController;
 __decorate([
@@ -72,6 +76,15 @@ __decorate([
     __metadata("design:paramtypes", [Object, update_settings_dto_1.UpdateOrgSettingsDto, Object]),
     __metadata("design:returntype", Promise)
 ], OrganizationController.prototype, "previewSettings", null);
+__decorate([
+    (0, common_1.Get)('audit-logs'),
+    (0, roles_decorator_1.Roles)(client_1.UserRole.ORG_ADMIN),
+    __param(0, (0, common_1.Request)()),
+    __param(1, (0, common_1.Query)('limit')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, String]),
+    __metadata("design:returntype", Promise)
+], OrganizationController.prototype, "getAuditLogs", null);
 exports.OrganizationController = OrganizationController = __decorate([
     (0, common_1.Controller)('organizations'),
     (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard, roles_guard_1.RolesGuard),

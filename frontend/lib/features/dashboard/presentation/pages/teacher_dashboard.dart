@@ -124,6 +124,10 @@ class _TeacherDashboardState extends ConsumerState<TeacherDashboard> {
               child: const Text('Batal'),
             ),
             ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                minimumSize: const Size(100, 36),
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+              ),
               onPressed: () {
                 if (formKey.currentState!.validate()) {
                   Navigator.pop(context);
@@ -573,6 +577,10 @@ class _TeacherDashboardState extends ConsumerState<TeacherDashboard> {
                                         ),
                                         const SizedBox(width: 12),
                                         ElevatedButton.icon(
+                                          style: ElevatedButton.styleFrom(
+                                            minimumSize: const Size(100, 36),
+                                            padding: const EdgeInsets.symmetric(horizontal: 12),
+                                          ),
                                           icon: const Icon(Icons.check_rounded, size: 18),
                                           label: const Text('Setujui', style: TextStyle(fontWeight: FontWeight.bold)),
                                           onPressed: () => _showNoteDialog(permit['id'], 'approve'),

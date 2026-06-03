@@ -42,4 +42,22 @@ export declare class OrganizationService {
         };
         template: any;
     }>;
+    getAuditLogs(organizationId: string, limit?: number): Promise<({
+        user: {
+            id: string;
+            email: string;
+            role: import(".prisma/client").$Enums.UserRole;
+            fullName: string;
+            avatarUrl: string;
+        };
+    } & {
+        id: string;
+        createdAt: Date;
+        organizationId: string;
+        userId: string | null;
+        action: string;
+        details: string;
+        ipAddress: string | null;
+        userAgent: string | null;
+    })[]>;
 }

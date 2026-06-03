@@ -17,6 +17,8 @@ const common_1 = require("@nestjs/common");
 const auth_service_1 = require("./auth.service");
 const login_dto_1 = require("./dto/login.dto");
 const register_org_dto_1 = require("./dto/register-org.dto");
+const update_profile_dto_1 = require("./dto/update-profile.dto");
+const change_password_dto_1 = require("./dto/change-password.dto");
 const jwt_auth_guard_1 = require("../../common/guards/jwt-auth.guard");
 const roles_guard_1 = require("../../common/guards/roles.guard");
 const tenant_interceptor_1 = require("../../common/interceptors/tenant.interceptor");
@@ -32,6 +34,15 @@ let AuthController = class AuthController {
     }
     async registerOrg(dto) {
         return this.authService.registerOrganization(dto);
+    }
+    async getProfile(req) {
+        return this.authService.getProfile(req.user.userId);
+    }
+    async updateProfile(req, dto) {
+        return this.authService.updateProfile(req.user.userId, dto);
+    }
+    async changePassword(req, dto) {
+        return this.authService.changePassword(req.user.userId, dto.oldPassword, dto.newPassword);
     }
     async createClassroom(tenantId, dto) {
         return this.authService.createClassroom(tenantId, dto);
@@ -90,6 +101,32 @@ __decorate([
     __metadata("design:paramtypes", [register_org_dto_1.RegisterOrgDto]),
     __metadata("design:returntype", Promise)
 ], AuthController.prototype, "registerOrg", null);
+__decorate([
+    (0, common_1.Get)('profile'),
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
+    __param(0, (0, common_1.Request)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object]),
+    __metadata("design:returntype", Promise)
+], AuthController.prototype, "getProfile", null);
+__decorate([
+    (0, common_1.Put)('profile'),
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
+    __param(0, (0, common_1.Request)()),
+    __param(1, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, update_profile_dto_1.UpdateProfileDto]),
+    __metadata("design:returntype", Promise)
+], AuthController.prototype, "updateProfile", null);
+__decorate([
+    (0, common_1.Put)('change-password'),
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
+    __param(0, (0, common_1.Request)()),
+    __param(1, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, change_password_dto_1.ChangePasswordDto]),
+    __metadata("design:returntype", Promise)
+], AuthController.prototype, "changePassword", null);
 __decorate([
     (0, common_1.Post)('classrooms'),
     (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard, roles_guard_1.RolesGuard),

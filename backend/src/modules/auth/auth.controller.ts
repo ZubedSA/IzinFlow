@@ -10,10 +10,13 @@ import {
   HttpStatus,
   UseGuards,
   UseInterceptors,
+  Request,
 } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
 import { RegisterOrgDto } from './dto/register-org.dto';
+import { UpdateProfileDto } from './dto/update-profile.dto';
+import { ChangePasswordDto } from './dto/change-password.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { TenantInterceptor } from '../../common/interceptors/tenant.interceptor';
@@ -36,6 +39,28 @@ export class AuthController {
   async registerOrg(@Body() dto: RegisterOrgDto) {
     return this.authService.registerOrganization(dto);
   }
+
+  // --- PROFILE MANAGEMENT ---
+
+  @Get('profile')
+  @UseGuards(JwtAuthGuard)
+  async getProfile(@Request() req: any) {
+    return this.authService.getProfile(req.user.userId);
+  }
+
+  @Put('profile')
+  @UseGuards(JwtAuthGuard)
+  async updateProfile(@Request() req: any, @Body() dto: UpdateProfileDto) {
+    return this.authService.updateProfile(req.user.userId, dto);
+  }
+
+  @Put('change-password')
+  @UseGuards(JwtAuthGuard)
+  async changePassword(@Request() req: any, @Body() dto: ChangePasswordDto) {
+    return this.authService.changePassword(req.user.userId, dto.oldPassword, dto.newPassword);
+  }
+
+  // --- CLASSROOM MANAGEMENT ---
 
   @Post('classrooms')
   @UseGuards(JwtAuthGuard, RolesGuard)
@@ -143,3 +168,4 @@ export class AuthController {
     return this.authService.deleteOrganization(id);
   }
 }
+

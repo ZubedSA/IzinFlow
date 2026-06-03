@@ -74,9 +74,17 @@ class _OrgAdminDashboardState extends ConsumerState<OrgAdminDashboard> {
   final _orgContactController = TextEditingController();
   final _orgTemplateController = TextEditingController();
 
+  // Search Controllers
+  final _classSearchController = TextEditingController();
+  final _teacherSearchController = TextEditingController();
+  final _studentSearchController = TextEditingController();
+
   @override
   void initState() {
     super.initState();
+    _classSearchController.addListener(() => setState(() {}));
+    _teacherSearchController.addListener(() => setState(() {}));
+    _studentSearchController.addListener(() => setState(() {}));
     Future.microtask(() {
       _fetchData();
       _fetchDirectoryData();
@@ -101,6 +109,10 @@ class _OrgAdminDashboardState extends ConsumerState<OrgAdminDashboard> {
     _orgAddressController.dispose();
     _orgContactController.dispose();
     _orgTemplateController.dispose();
+
+    _classSearchController.dispose();
+    _teacherSearchController.dispose();
+    _studentSearchController.dispose();
     super.dispose();
   }
 
@@ -599,19 +611,528 @@ class _OrgAdminDashboardState extends ConsumerState<OrgAdminDashboard> {
     }
   }
 
+  // --- MODAL SHEETS FOR ADDING DATA ---
+
+  void _showAddClassroomBottomSheet() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        bool isModalLoading = false;
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            final theme = Theme.of(context);
+            return Container(
+              decoration: BoxDecoration(
+                color: theme.colorScheme.surface,
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+              ),
+              padding: EdgeInsets.only(
+                top: 16,
+                left: 24,
+                right: 24,
+                bottom: 24 + MediaQuery.of(context).viewInsets.bottom,
+              ),
+              child: SingleChildScrollView(
+                child: Form(
+                  key: _classFormKey,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Center(
+                        child: Container(
+                          width: 40,
+                          height: 4,
+                          margin: const EdgeInsets.only(bottom: 20),
+                          decoration: BoxDecoration(
+                            color: Colors.grey.shade300,
+                            borderRadius: BorderRadius.circular(2),
+                          ),
+                        ),
+                      ),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Row(
+                            children: [
+                              Icon(Icons.add_box_rounded, color: theme.colorScheme.primary, size: 28),
+                              const SizedBox(width: 8),
+                              Text(
+                                'Buat Kelas Baru',
+                                style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+                              ),
+                            ],
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.close_rounded),
+                            onPressed: () => Navigator.pop(context),
+                          ),
+                        ],
+                      ),
+                      const Divider(height: 24),
+                      TextFormField(
+                        controller: _classNameController,
+                        decoration: const InputDecoration(
+                          labelText: 'Nama Kelas',
+                          hintText: 'misal: XII IPA 1',
+                          border: OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(12))),
+                        ),
+                        validator: (value) => value == null || value.trim().isEmpty ? 'Nama kelas wajib diisi.' : null,
+                      ),
+                      const SizedBox(height: 24),
+                      SizedBox(
+                        width: double.infinity,
+                        height: 50,
+                        child: ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: theme.colorScheme.primary,
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            elevation: 0,
+                          ),
+                          onPressed: isModalLoading
+                              ? null
+                              : () async {
+                                  if (_classFormKey.currentState!.validate()) {
+                                    setModalState(() => isModalLoading = true);
+                                    try {
+                                      final dio = ref.read(apiClientProvider);
+                                      await dio.post('/auth/classrooms', data: {
+                                        'name': _classNameController.text,
+                                      });
+                                      if (context.mounted) {
+                                        Navigator.pop(context);
+                                        _classNameController.clear();
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          const SnackBar(content: Text('Kelas baru berhasil dibuat!'), backgroundColor: Colors.green),
+                                        );
+                                        _fetchData();
+                                        _fetchDirectoryData();
+                                      }
+                                    } catch (e) {
+                                      if (context.mounted) {
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          const SnackBar(content: Text('Gagal membuat kelas baru.'), backgroundColor: Colors.red),
+                                        );
+                                      }
+                                    } finally {
+                                      setModalState(() => isModalLoading = false);
+                                    }
+                                  }
+                                },
+                          child: isModalLoading
+                              ? const SizedBox(
+                                  width: 24,
+                                  height: 24,
+                                  child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                                )
+                              : const Text('Buat Kelas Baru', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  void _showAddTeacherBottomSheet() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        bool isModalLoading = false;
+        String? localSelectedClassroomId = _teacherSelectedClassroomId;
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            final theme = Theme.of(context);
+            return Container(
+              decoration: BoxDecoration(
+                color: theme.colorScheme.surface,
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+              ),
+              padding: EdgeInsets.only(
+                top: 16,
+                left: 24,
+                right: 24,
+                bottom: 24 + MediaQuery.of(context).viewInsets.bottom,
+              ),
+              child: SingleChildScrollView(
+                child: Form(
+                  key: _teacherFormKey,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Center(
+                        child: Container(
+                          width: 40,
+                          height: 4,
+                          margin: const EdgeInsets.only(bottom: 20),
+                          decoration: BoxDecoration(
+                            color: Colors.grey.shade300,
+                            borderRadius: BorderRadius.circular(2),
+                          ),
+                        ),
+                      ),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Row(
+                            children: [
+                              Icon(Icons.person_add_rounded, color: theme.colorScheme.primary, size: 28),
+                              const SizedBox(width: 8),
+                              Text(
+                                'Daftarkan Akun Guru Baru',
+                                style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+                              ),
+                            ],
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.close_rounded),
+                            onPressed: () => Navigator.pop(context),
+                          ),
+                        ],
+                      ),
+                      const Divider(height: 24),
+                      TextFormField(
+                        controller: _teacherNameController,
+                        decoration: const InputDecoration(
+                          labelText: 'Nama Lengkap & Gelar',
+                          border: OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(12))),
+                        ),
+                        validator: (v) => v == null || v.trim().isEmpty ? 'Nama wajib diisi' : null,
+                      ),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: _teacherNipController,
+                        decoration: const InputDecoration(
+                          labelText: 'NIP / No. Induk Guru',
+                          border: OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(12))),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: _teacherEmailController,
+                        decoration: const InputDecoration(
+                          labelText: 'Email Guru',
+                          border: OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(12))),
+                        ),
+                        validator: (v) => v == null || !v.contains('@') ? 'Email tidak valid' : null,
+                      ),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: _teacherPasswordController,
+                        obscureText: true,
+                        decoration: const InputDecoration(
+                          labelText: 'Password',
+                          border: OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(12))),
+                        ),
+                        validator: (v) => v == null || v.length < 6 ? 'Password minimal 6 karakter' : null,
+                      ),
+                      const SizedBox(height: 12),
+                      DropdownButtonFormField<String>(
+                        value: localSelectedClassroomId,
+                        decoration: const InputDecoration(
+                          labelText: 'Wali Kelas Untuk',
+                          border: OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(12))),
+                        ),
+                        items: [
+                          const DropdownMenuItem(value: null, child: Text('-- Tanpa Kelas --')),
+                          ..._classrooms.map((c) => DropdownMenuItem(value: c['id'].toString(), child: Text(c['name'].toString()))),
+                        ],
+                        onChanged: (val) {
+                          setModalState(() => localSelectedClassroomId = val);
+                        },
+                      ),
+                      const SizedBox(height: 24),
+                      SizedBox(
+                        width: double.infinity,
+                        height: 50,
+                        child: ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: theme.colorScheme.primary,
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            elevation: 0,
+                          ),
+                          onPressed: isModalLoading
+                              ? null
+                              : () async {
+                                  if (_teacherFormKey.currentState!.validate()) {
+                                    setModalState(() => isModalLoading = true);
+                                    try {
+                                      final dio = ref.read(apiClientProvider);
+                                      await dio.post('/auth/teachers', data: {
+                                        'fullName': _teacherNameController.text,
+                                        'employeeNumber': _teacherNipController.text,
+                                        'email': _teacherEmailController.text,
+                                        'password': _teacherPasswordController.text,
+                                        'classRoomId': localSelectedClassroomId,
+                                      });
+                                      if (context.mounted) {
+                                        Navigator.pop(context);
+                                        _teacherNameController.clear();
+                                        _teacherNipController.clear();
+                                        _teacherEmailController.clear();
+                                        _teacherPasswordController.clear();
+                                        setState(() {
+                                          _teacherSelectedClassroomId = null;
+                                        });
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          const SnackBar(content: Text('Akun Guru berhasil didaftarkan!'), backgroundColor: Colors.green),
+                                        );
+                                        _fetchData();
+                                        _fetchDirectoryData();
+                                      }
+                                    } catch (e) {
+                                      if (context.mounted) {
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          const SnackBar(content: Text('Gagal mendaftarkan guru baru.'), backgroundColor: Colors.red),
+                                        );
+                                      }
+                                    } finally {
+                                      setModalState(() => isModalLoading = false);
+                                    }
+                                  }
+                                },
+                          child: isModalLoading
+                              ? const SizedBox(
+                                  width: 24,
+                                  height: 24,
+                                  child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                                )
+                              : const Text('Daftarkan Guru Baru', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  void _showAddStudentBottomSheet() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        bool isModalLoading = false;
+        String? localSelectedClassroomId = _studentSelectedClassroomId;
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            final theme = Theme.of(context);
+            return Container(
+              decoration: BoxDecoration(
+                color: theme.colorScheme.surface,
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+              ),
+              padding: EdgeInsets.only(
+                top: 16,
+                left: 24,
+                right: 24,
+                bottom: 24 + MediaQuery.of(context).viewInsets.bottom,
+              ),
+              child: SingleChildScrollView(
+                child: Form(
+                  key: _studentFormKey,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Center(
+                        child: Container(
+                          width: 40,
+                          height: 4,
+                          margin: const EdgeInsets.only(bottom: 20),
+                          decoration: BoxDecoration(
+                            color: Colors.grey.shade300,
+                            borderRadius: BorderRadius.circular(2),
+                          ),
+                        ),
+                      ),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Row(
+                            children: [
+                              Icon(Icons.group_add_rounded, color: theme.colorScheme.primary, size: 28),
+                              const SizedBox(width: 8),
+                              Text(
+                                'Daftarkan Akun Siswa Baru',
+                                style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+                              ),
+                            ],
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.close_rounded),
+                            onPressed: () => Navigator.pop(context),
+                          ),
+                        ],
+                      ),
+                      const Divider(height: 24),
+                      TextFormField(
+                        controller: _studentNameController,
+                        decoration: const InputDecoration(
+                          labelText: 'Nama Lengkap',
+                          border: OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(12))),
+                        ),
+                        validator: (v) => v == null || v.trim().isEmpty ? 'Nama wajib diisi' : null,
+                      ),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: _studentNisnController,
+                        decoration: const InputDecoration(
+                          labelText: 'NISN / NIS',
+                          border: OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(12))),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: _studentEmailController,
+                        decoration: const InputDecoration(
+                          labelText: 'Email Siswa',
+                          border: OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(12))),
+                        ),
+                        validator: (v) => v == null || !v.contains('@') ? 'Email tidak valid' : null,
+                      ),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: _studentPasswordController,
+                        obscureText: true,
+                        decoration: const InputDecoration(
+                          labelText: 'Password',
+                          border: OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(12))),
+                        ),
+                        validator: (v) => v == null || v.length < 6 ? 'Password minimal 6 karakter' : null,
+                      ),
+                      const SizedBox(height: 12),
+                      DropdownButtonFormField<String>(
+                        value: localSelectedClassroomId,
+                        decoration: const InputDecoration(
+                          labelText: 'Pilih Kelas',
+                          border: OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(12))),
+                        ),
+                        items: [
+                          const DropdownMenuItem(value: null, child: Text('-- Pilih Kelas --')),
+                          ..._classrooms.map((c) => DropdownMenuItem(value: c['id'].toString(), child: Text(c['name'].toString()))),
+                        ],
+                        onChanged: (val) {
+                          setModalState(() => localSelectedClassroomId = val);
+                        },
+                      ),
+                      const SizedBox(height: 24),
+                      SizedBox(
+                        width: double.infinity,
+                        height: 50,
+                        child: ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: theme.colorScheme.primary,
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            elevation: 0,
+                          ),
+                          onPressed: isModalLoading
+                              ? null
+                              : () async {
+                                  if (_studentFormKey.currentState!.validate()) {
+                                    if (localSelectedClassroomId == null) {
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        const SnackBar(content: Text('Silakan pilih kelas terlebih dahulu!'), backgroundColor: Colors.red),
+                                      );
+                                      return;
+                                    }
+                                    setModalState(() => isModalLoading = true);
+                                    try {
+                                      final dio = ref.read(apiClientProvider);
+                                      await dio.post('/auth/students', data: {
+                                        'fullName': _studentNameController.text,
+                                        'studentIdNumber': _studentNisnController.text,
+                                        'email': _studentEmailController.text,
+                                        'password': _studentPasswordController.text,
+                                        'classRoomId': localSelectedClassroomId,
+                                      });
+                                      if (context.mounted) {
+                                        Navigator.pop(context);
+                                        _studentNameController.clear();
+                                        _studentNisnController.clear();
+                                        _studentEmailController.clear();
+                                        _studentPasswordController.clear();
+                                        setState(() {
+                                          _studentSelectedClassroomId = null;
+                                        });
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          const SnackBar(content: Text('Akun Siswa berhasil didaftarkan!'), backgroundColor: Colors.green),
+                                        );
+                                        _fetchData();
+                                        _fetchDirectoryData();
+                                      }
+                                    } catch (e) {
+                                      if (context.mounted) {
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          const SnackBar(content: Text('Gagal mendaftarkan siswa baru.'), backgroundColor: Colors.red),
+                                        );
+                                      }
+                                    } finally {
+                                      setModalState(() => isModalLoading = false);
+                                    }
+                                  }
+                                },
+                          child: isModalLoading
+                              ? const SizedBox(
+                                  width: 24,
+                                  height: 24,
+                                  child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                                )
+                              : const Text('Daftarkan Siswa Baru', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
   void _showEditClassDialog(dynamic c) {
     final txtCtrl = TextEditingController(text: c['name']);
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Ubah Kelas'),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text('Ubah Kelas', style: TextStyle(fontWeight: FontWeight.bold)),
+        contentPadding: const EdgeInsets.only(left: 24, right: 24, top: 20, bottom: 8),
         content: TextFormField(
           controller: txtCtrl,
-          decoration: const InputDecoration(labelText: 'Nama Kelas', border: OutlineInputBorder()),
+          decoration: const InputDecoration(
+            labelText: 'Nama Kelas', 
+            border: OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(12)))
+          ),
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Batal')),
           ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Theme.of(context).colorScheme.primary,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
             onPressed: () async {
               Navigator.pop(ctx);
               setState(() => _isLoading = true);
@@ -627,7 +1148,7 @@ class _OrgAdminDashboardState extends ConsumerState<OrgAdminDashboard> {
                 if (mounted) setState(() => _isLoading = false);
               }
             }, 
-            child: const Text('Simpan')
+            child: const Text('Simpan', style: TextStyle(fontWeight: FontWeight.bold))
           ),
         ],
       ),
@@ -638,25 +1159,51 @@ class _OrgAdminDashboardState extends ConsumerState<OrgAdminDashboard> {
     final nameCtrl = TextEditingController(text: t['user']['fullName']);
     final nipCtrl = TextEditingController(text: t['employeeNumber']);
     final emailCtrl = TextEditingController(text: t['user']['email']);
-    String? classId = _classrooms.isNotEmpty ? _classrooms.first['id'] : null;
 
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Ubah Guru'),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text('Ubah Guru', style: TextStyle(fontWeight: FontWeight.bold)),
+        contentPadding: const EdgeInsets.only(left: 24, right: 24, top: 20, bottom: 8),
         content: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              TextFormField(controller: nameCtrl, decoration: const InputDecoration(labelText: 'Nama Lengkap')),
-              TextFormField(controller: nipCtrl, decoration: const InputDecoration(labelText: 'NIP')),
-              TextFormField(controller: emailCtrl, decoration: const InputDecoration(labelText: 'Email')),
+              TextFormField(
+                controller: nameCtrl, 
+                decoration: const InputDecoration(
+                  labelText: 'Nama Lengkap', 
+                  border: OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(12)))
+                )
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: nipCtrl, 
+                decoration: const InputDecoration(
+                  labelText: 'NIP', 
+                  border: OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(12)))
+                )
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: emailCtrl, 
+                decoration: const InputDecoration(
+                  labelText: 'Email', 
+                  border: OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(12)))
+                )
+              ),
             ],
           ),
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Batal')),
           ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Theme.of(context).colorScheme.primary,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
             onPressed: () async {
               Navigator.pop(ctx);
               setState(() => _isLoading = true);
@@ -676,7 +1223,7 @@ class _OrgAdminDashboardState extends ConsumerState<OrgAdminDashboard> {
                 if (mounted) setState(() => _isLoading = false);
               }
             }, 
-            child: const Text('Simpan')
+            child: const Text('Simpan', style: TextStyle(fontWeight: FontWeight.bold))
           ),
         ],
       ),
@@ -691,20 +1238,47 @@ class _OrgAdminDashboardState extends ConsumerState<OrgAdminDashboard> {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Ubah Siswa'),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text('Ubah Siswa', style: TextStyle(fontWeight: FontWeight.bold)),
+        contentPadding: const EdgeInsets.only(left: 24, right: 24, top: 20, bottom: 8),
         content: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              TextFormField(controller: nameCtrl, decoration: const InputDecoration(labelText: 'Nama Lengkap')),
-              TextFormField(controller: nisnCtrl, decoration: const InputDecoration(labelText: 'NISN')),
-              TextFormField(controller: emailCtrl, decoration: const InputDecoration(labelText: 'Email')),
+              TextFormField(
+                controller: nameCtrl, 
+                decoration: const InputDecoration(
+                  labelText: 'Nama Lengkap', 
+                  border: OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(12)))
+                )
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: nisnCtrl, 
+                decoration: const InputDecoration(
+                  labelText: 'NISN', 
+                  border: OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(12)))
+                )
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: emailCtrl, 
+                decoration: const InputDecoration(
+                  labelText: 'Email', 
+                  border: OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(12)))
+                )
+              ),
             ],
           ),
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Batal')),
           ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Theme.of(context).colorScheme.primary,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
             onPressed: () async {
               Navigator.pop(ctx);
               setState(() => _isLoading = true);
@@ -725,7 +1299,7 @@ class _OrgAdminDashboardState extends ConsumerState<OrgAdminDashboard> {
                 if (mounted) setState(() => _isLoading = false);
               }
             }, 
-            child: const Text('Simpan')
+            child: const Text('Simpan', style: TextStyle(fontWeight: FontWeight.bold))
           ),
         ],
       ),
@@ -1640,47 +2214,11 @@ class _OrgAdminDashboardState extends ConsumerState<OrgAdminDashboard> {
   }
 
   Widget _buildClassroomTab(bool isDesktop, ThemeData theme) {
-    final formCard = Card(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: Padding(
-        padding: const EdgeInsets.all(24.0),
-        child: Form(
-          key: _classFormKey,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Row(
-                children: [
-                  Icon(Icons.add_box_rounded, color: theme.colorScheme.primary),
-                  const SizedBox(width: 8),
-                  Text('Buat Kelas Baru', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
-                ],
-              ),
-              const SizedBox(height: 16),
-              TextFormField(
-                controller: _classNameController,
-                decoration: const InputDecoration(
-                  labelText: 'Nama Kelas',
-                  hintText: 'misal: XII IPA 1',
-                  border: OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(12))),
-                ),
-                validator: (value) => value == null || value.trim().isEmpty ? 'Nama kelas wajib diisi.' : null,
-              ),
-              const SizedBox(height: 20),
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  minimumSize: const Size(double.infinity, 50),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                ),
-                onPressed: _submitClassroom,
-                child: const Text('Buat Kelas Baru', style: TextStyle(fontWeight: FontWeight.bold)),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
+    final filteredClassrooms = _classrooms.where((c) {
+      final query = _classSearchController.text.toLowerCase();
+      final name = c['name'].toString().toLowerCase();
+      return name.contains(query);
+    }).toList();
 
     final listCard = Card(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -1689,46 +2227,183 @@ class _OrgAdminDashboardState extends ConsumerState<OrgAdminDashboard> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Row(
-                  children: [
-                    Icon(Icons.class_rounded, color: theme.colorScheme.primary),
-                    const SizedBox(width: 8),
-                    Text('Daftar Kelas Aktif', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
-                  ],
+            isDesktop
+                ? Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(Icons.class_rounded, color: theme.colorScheme.primary),
+                          const SizedBox(width: 8),
+                          Text('Daftar Kelas Aktif', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+                        ],
+                      ),
+                      FilledButton.icon(
+                        style: FilledButton.styleFrom(
+                          backgroundColor: theme.colorScheme.primary,
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                        icon: const Icon(Icons.add_rounded, size: 20),
+                        label: const Text('Tambah Kelas', style: TextStyle(fontWeight: FontWeight.bold)),
+                        onPressed: _showAddClassroomBottomSheet,
+                      ),
+                    ],
+                  )
+                : Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(Icons.class_rounded, color: theme.colorScheme.primary),
+                          const SizedBox(width: 8),
+                          Text('Daftar Kelas Aktif', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      SizedBox(
+                        width: double.infinity,
+                        child: FilledButton.icon(
+                          style: FilledButton.styleFrom(
+                            backgroundColor: theme.colorScheme.primary,
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          ),
+                          icon: const Icon(Icons.add_rounded, size: 20),
+                          label: const Text('Tambah Kelas', style: TextStyle(fontWeight: FontWeight.bold)),
+                          onPressed: _showAddClassroomBottomSheet,
+                        ),
+                      ),
+                    ],
+                  ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: _classSearchController,
+              decoration: InputDecoration(
+                hintText: 'Cari nama kelas...',
+                prefixIcon: const Icon(Icons.search_rounded),
+                suffixIcon: _classSearchController.text.isNotEmpty
+                    ? IconButton(
+                        icon: const Icon(Icons.clear_rounded),
+                        onPressed: () => _classSearchController.clear(),
+                      )
+                    : null,
+                contentPadding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(color: Colors.grey.shade300),
                 ),
-                // Toggle Button for Classroom Form
-                IconButton.filledTonal(
-                  icon: Icon(_showClassForm ? Icons.close_rounded : Icons.add_rounded),
-                  onPressed: () => setState(() => _showClassForm = !_showClassForm),
-                  tooltip: _showClassForm ? 'Tutup Formulir' : 'Tambah Kelas',
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(color: Colors.grey.shade200),
                 ),
-              ],
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(color: theme.colorScheme.primary, width: 1.5),
+                ),
+                filled: true,
+                fillColor: Colors.grey.shade50,
+              ),
             ),
-            const Divider(height: 24),
+            const Divider(height: 32),
             Expanded(
               child: _isDirLoading
                   ? const CustomLoadingIndicator()
-                  : _classrooms.isEmpty
+                  : filteredClassrooms.isEmpty
                       ? const Center(child: Text('Belum ada kelas.', style: TextStyle(color: Colors.grey)))
                       : ListView.separated(
-                          itemCount: _classrooms.length,
-                          separatorBuilder: (_, __) => const Divider(),
+                          itemCount: filteredClassrooms.length,
+                          separatorBuilder: (_, __) => const SizedBox(height: 12),
                           itemBuilder: (context, idx) {
-                            final c = _classrooms[idx];
+                            final c = filteredClassrooms[idx];
                             final hr = c['homeroomTeacher'];
                             final teacherName = hr != null && hr['user'] != null ? hr['user']['fullName'] : 'Belum diatur';
-                            return ListTile(
-                              contentPadding: EdgeInsets.zero,
-                              title: Text(c['name'].toString(), style: const TextStyle(fontWeight: FontWeight.bold)),
-                              subtitle: Text('Wali Kelas: $teacherName', style: const TextStyle(fontSize: 12)),
-                              trailing: Row(
-                                mainAxisSize: MainAxisSize.min,
+                            return Container(
+                              padding: EdgeInsets.symmetric(horizontal: isDesktop ? 16 : 10, vertical: 12),
+                              decoration: BoxDecoration(
+                                color: Colors.grey.shade50,
+                                borderRadius: BorderRadius.circular(16),
+                                border: Border.all(color: Colors.grey.shade100, width: 1.5),
+                              ),
+                              child: Row(
                                 children: [
-                                  IconButton(icon: const Icon(Icons.edit_rounded, size: 20, color: Colors.blue), onPressed: () => _showEditClassDialog(c)),
-                                  IconButton(icon: const Icon(Icons.delete_rounded, size: 20, color: Colors.red), onPressed: () => _deleteClassroom(c['id'])),
+                                  Container(
+                                    width: 48,
+                                    height: 48,
+                                    decoration: BoxDecoration(
+                                      color: theme.colorScheme.primary.withOpacity(0.1),
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: Center(
+                                      child: Icon(
+                                        Icons.class_rounded,
+                                        color: theme.colorScheme.primary,
+                                        size: 24,
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 16),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          c['name'].toString(),
+                                          style: const TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 16,
+                                          ),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                        const SizedBox(height: 4),
+                                        Row(
+                                          children: [
+                                            Icon(Icons.person_outline_rounded, size: 14, color: Colors.grey.shade600),
+                                            const SizedBox(width: 4),
+                                            Expanded(
+                                              child: Text(
+                                                'Wali Kelas: $teacherName',
+                                                style: TextStyle(
+                                                  fontSize: 12,
+                                                  color: Colors.grey.shade600,
+                                                ),
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      IconButton.filledTonal(
+                                        constraints: const BoxConstraints(),
+                                        style: IconButton.styleFrom(
+                                          backgroundColor: Colors.blue.shade50,
+                                          foregroundColor: Colors.blue,
+                                          minimumSize: Size(isDesktop ? 40 : 32, isDesktop ? 40 : 32),
+                                          padding: EdgeInsets.zero,
+                                        ),
+                                        icon: Icon(Icons.edit_rounded, size: isDesktop ? 18 : 16),
+                                        onPressed: () => _showEditClassDialog(c),
+                                      ),
+                                      SizedBox(width: isDesktop ? 8 : 4),
+                                      IconButton.filledTonal(
+                                        constraints: const BoxConstraints(),
+                                        style: IconButton.styleFrom(
+                                          backgroundColor: Colors.red.shade50,
+                                          foregroundColor: Colors.red,
+                                          minimumSize: Size(isDesktop ? 40 : 32, isDesktop ? 40 : 32),
+                                          padding: EdgeInsets.zero,
+                                        ),
+                                        icon: Icon(Icons.delete_rounded, size: isDesktop ? 18 : 16),
+                                        onPressed: () => _deleteClassroom(c['id']),
+                                      ),
+                                    ],
+                                  ),
                                 ],
                               ),
                             );
@@ -1740,123 +2415,19 @@ class _OrgAdminDashboardState extends ConsumerState<OrgAdminDashboard> {
       ),
     );
 
-    if (_showClassForm) {
-      if (isDesktop) {
-        return Padding(
-          padding: const EdgeInsets.all(32.0),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(child: SingleChildScrollView(child: formCard)),
-              const SizedBox(width: 24),
-              Expanded(child: listCard),
-            ],
-          ),
-        );
-      } else {
-        return SingleChildScrollView(
-          padding: const EdgeInsets.all(16.0),
-          child: Column(
-            children: [
-              formCard,
-              const SizedBox(height: 16),
-              SizedBox(height: 400, child: listCard),
-            ],
-          ),
-        );
-      }
-    } else {
-      // Form is hidden, show list in full screen/width
-      return Padding(
-        padding: EdgeInsets.all(isDesktop ? 32.0 : 16.0),
-        child: listCard,
-      );
-    }
+    return Padding(
+      padding: EdgeInsets.all(isDesktop ? 32.0 : 16.0),
+      child: listCard,
+    );
   }
 
   Widget _buildTeacherTab(bool isDesktop, ThemeData theme) {
-    final formCard = Card(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: Padding(
-        padding: const EdgeInsets.all(24.0),
-        child: Form(
-          key: _teacherFormKey,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Row(
-                children: [
-                  Icon(Icons.person_add_rounded, color: theme.colorScheme.primary),
-                  const SizedBox(width: 8),
-                  Text('Daftarkan Akun Guru Baru', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
-                ],
-              ),
-              const SizedBox(height: 16),
-              TextFormField(
-                controller: _teacherNameController,
-                decoration: const InputDecoration(
-                  labelText: 'Nama Lengkap & Gelar',
-                  border: OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(12))),
-                ),
-                validator: (v) => v == null || v.trim().isEmpty ? 'Nama wajib diisi' : null,
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: _teacherNipController,
-                decoration: const InputDecoration(
-                  labelText: 'NIP / No. Induk Guru',
-                  border: OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(12))),
-                ),
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: _teacherEmailController,
-                decoration: const InputDecoration(
-                  labelText: 'Email Guru',
-                  border: OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(12))),
-                ),
-                validator: (v) => v == null || !v.contains('@') ? 'Email tidak valid' : null,
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: _teacherPasswordController,
-                obscureText: true,
-                decoration: const InputDecoration(
-                  labelText: 'Password',
-                  border: OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(12))),
-                ),
-                validator: (v) => v == null || v.length < 6 ? 'Password minimal 6 karakter' : null,
-              ),
-              const SizedBox(height: 12),
-              DropdownButtonFormField<String>(
-                value: _teacherSelectedClassroomId,
-                decoration: const InputDecoration(
-                  labelText: 'Wali Kelas Untuk',
-                  border: OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(12))),
-                ),
-                items: [
-                  const DropdownMenuItem(value: null, child: Text('-- Tanpa Kelas --')),
-                  ..._classrooms.map((c) => DropdownMenuItem(value: c['id'].toString(), child: Text(c['name'].toString()))),
-                ],
-                onChanged: (val) {
-                  setState(() => _teacherSelectedClassroomId = val);
-                },
-              ),
-              const SizedBox(height: 20),
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  minimumSize: const Size(double.infinity, 50),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                ),
-                onPressed: _submitTeacher,
-                child: const Text('Daftarkan Guru Baru', style: TextStyle(fontWeight: FontWeight.bold)),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
+    final filteredTeachers = _teachers.where((t) {
+      final query = _teacherSearchController.text.toLowerCase();
+      final name = (t['user'] != null ? t['user']['fullName'] : 'Guru').toString().toLowerCase();
+      final nip = (t['employeeNumber'] ?? '').toString().toLowerCase();
+      return name.contains(query) || nip.contains(query);
+    }).toList();
 
     final listCard = Card(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -1865,46 +2436,240 @@ class _OrgAdminDashboardState extends ConsumerState<OrgAdminDashboard> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Row(
-                  children: [
-                    Icon(Icons.people_alt_rounded, color: theme.colorScheme.primary),
-                    const SizedBox(width: 8),
-                    Text('Daftar Guru Aktif', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
-                  ],
+            isDesktop
+                ? Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(Icons.people_alt_rounded, color: theme.colorScheme.primary),
+                          const SizedBox(width: 8),
+                          Text('Daftar Guru Guru Aktif', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+                        ],
+                      ),
+                      FilledButton.icon(
+                        style: FilledButton.styleFrom(
+                          backgroundColor: theme.colorScheme.primary,
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                        icon: const Icon(Icons.add_rounded, size: 20),
+                        label: const Text('Tambah Guru', style: TextStyle(fontWeight: FontWeight.bold)),
+                        onPressed: _showAddTeacherBottomSheet,
+                      ),
+                    ],
+                  )
+                : Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(Icons.people_alt_rounded, color: theme.colorScheme.primary),
+                          const SizedBox(width: 8),
+                          Text('Daftar Guru Guru Aktif', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      SizedBox(
+                        width: double.infinity,
+                        child: FilledButton.icon(
+                          style: FilledButton.styleFrom(
+                            backgroundColor: theme.colorScheme.primary,
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          ),
+                          icon: const Icon(Icons.add_rounded, size: 20),
+                          label: const Text('Tambah Guru', style: TextStyle(fontWeight: FontWeight.bold)),
+                          onPressed: _showAddTeacherBottomSheet,
+                        ),
+                      ),
+                    ],
+                  ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: _teacherSearchController,
+              decoration: InputDecoration(
+                hintText: 'Cari nama guru atau NIP...',
+                prefixIcon: const Icon(Icons.search_rounded),
+                suffixIcon: _teacherSearchController.text.isNotEmpty
+                    ? IconButton(
+                        icon: const Icon(Icons.clear_rounded),
+                        onPressed: () => _teacherSearchController.clear(),
+                      )
+                    : null,
+                contentPadding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(color: Colors.grey.shade300),
                 ),
-                // Toggle Button for Teacher Form
-                IconButton.filledTonal(
-                  icon: Icon(_showTeacherForm ? Icons.close_rounded : Icons.add_rounded),
-                  onPressed: () => setState(() => _showTeacherForm = !_showTeacherForm),
-                  tooltip: _showTeacherForm ? 'Tutup Formulir' : 'Tambah Guru',
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(color: Colors.grey.shade200),
                 ),
-              ],
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(color: theme.colorScheme.primary, width: 1.5),
+                ),
+                filled: true,
+                fillColor: Colors.grey.shade50,
+              ),
             ),
-            const Divider(height: 24),
+            const Divider(height: 32),
             Expanded(
               child: _isDirLoading
                   ? const CustomLoadingIndicator()
-                  : _teachers.isEmpty
+                  : filteredTeachers.isEmpty
                       ? const Center(child: Text('Belum ada guru.', style: TextStyle(color: Colors.grey)))
                       : ListView.separated(
-                          itemCount: _teachers.length,
-                          separatorBuilder: (_, __) => const Divider(),
+                          itemCount: filteredTeachers.length,
+                          separatorBuilder: (_, __) => const SizedBox(height: 12),
                           itemBuilder: (context, idx) {
-                            final t = _teachers[idx];
+                            final t = filteredTeachers[idx];
                             final name = t['user'] != null ? t['user']['fullName'] : 'Guru';
                             final email = t['user'] != null ? t['user']['email'] : '-';
-                            return ListTile(
-                              contentPadding: EdgeInsets.zero,
-                              title: Text(name.toString(), style: const TextStyle(fontWeight: FontWeight.bold)),
-                              subtitle: Text('Email: $email  •  NIP: ${t['employeeNumber'] ?? "-"}', style: const TextStyle(fontSize: 12)),
-                              trailing: Row(
-                                mainAxisSize: MainAxisSize.min,
+                            final nip = t['employeeNumber'] ?? "-";
+
+                            // Generate initials for avatar
+                            final nameParts = name.toString().split(' ');
+                            final initials = nameParts.length > 1 
+                                ? '${nameParts[0][0]}${nameParts[1][0]}'.toUpperCase()
+                                : nameParts[0][0].toUpperCase();
+
+                            return Container(
+                              padding: EdgeInsets.symmetric(horizontal: isDesktop ? 16 : 10, vertical: 12),
+                              decoration: BoxDecoration(
+                                color: Colors.grey.shade50,
+                                borderRadius: BorderRadius.circular(16),
+                                border: Border.all(color: Colors.grey.shade100, width: 1.5),
+                              ),
+                              child: Row(
                                 children: [
-                                  IconButton(icon: const Icon(Icons.edit_rounded, size: 20, color: Colors.blue), onPressed: () => _showEditTeacherDialog(t)),
-                                  IconButton(icon: const Icon(Icons.delete_rounded, size: 20, color: Colors.red), onPressed: () => _deleteTeacher(t['id'])),
+                                  Container(
+                                    width: 48,
+                                    height: 48,
+                                    decoration: BoxDecoration(
+                                      color: theme.colorScheme.secondary.withOpacity(0.1),
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: Center(
+                                      child: Text(
+                                        initials,
+                                        style: TextStyle(
+                                          color: theme.colorScheme.secondary,
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 16,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 16),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          name.toString(),
+                                          style: const TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 16,
+                                          ),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                        const SizedBox(height: 4),
+                                        isDesktop
+                                            ? Row(
+                                                children: [
+                                                  Icon(Icons.badge_outlined, size: 14, color: Colors.grey.shade600),
+                                                  const SizedBox(width: 4),
+                                                  Text(
+                                                    'NIP: $nip',
+                                                    style: TextStyle(
+                                                      fontSize: 12,
+                                                      color: Colors.grey.shade600,
+                                                    ),
+                                                  ),
+                                                  const SizedBox(width: 12),
+                                                  Icon(Icons.email_outlined, size: 14, color: Colors.grey.shade600),
+                                                  const SizedBox(width: 4),
+                                                  Text(
+                                                    email,
+                                                    style: TextStyle(
+                                                      fontSize: 12,
+                                                      color: Colors.grey.shade600,
+                                                    ),
+                                                  ),
+                                                ],
+                                              )
+                                            : Column(
+                                                crossAxisAlignment: CrossAxisAlignment.start,
+                                                children: [
+                                                  Row(
+                                                    children: [
+                                                      Icon(Icons.badge_outlined, size: 12, color: Colors.grey.shade600),
+                                                      const SizedBox(width: 4),
+                                                      Expanded(
+                                                        child: Text(
+                                                          'NIP: $nip',
+                                                          style: TextStyle(
+                                                            fontSize: 11,
+                                                            color: Colors.grey.shade600,
+                                                          ),
+                                                          overflow: TextOverflow.ellipsis,
+                                                        ),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                  const SizedBox(height: 2),
+                                                  Row(
+                                                    children: [
+                                                      Icon(Icons.email_outlined, size: 12, color: Colors.grey.shade600),
+                                                      const SizedBox(width: 4),
+                                                      Expanded(
+                                                        child: Text(
+                                                          email,
+                                                          style: TextStyle(
+                                                            fontSize: 11,
+                                                            color: Colors.grey.shade600,
+                                                          ),
+                                                          overflow: TextOverflow.ellipsis,
+                                                        ),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                ],
+                                              ),
+                                      ],
+                                    ),
+                                  ),
+                                  Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      IconButton.filledTonal(
+                                        constraints: const BoxConstraints(),
+                                        style: IconButton.styleFrom(
+                                          backgroundColor: Colors.blue.shade50,
+                                          foregroundColor: Colors.blue,
+                                          minimumSize: Size(isDesktop ? 40 : 32, isDesktop ? 40 : 32),
+                                          padding: EdgeInsets.zero,
+                                        ),
+                                        icon: Icon(Icons.edit_rounded, size: isDesktop ? 18 : 16),
+                                        onPressed: () => _showEditTeacherDialog(t),
+                                      ),
+                                      SizedBox(width: isDesktop ? 8 : 4),
+                                      IconButton.filledTonal(
+                                        constraints: const BoxConstraints(),
+                                        style: IconButton.styleFrom(
+                                          backgroundColor: Colors.red.shade50,
+                                          foregroundColor: Colors.red,
+                                          minimumSize: Size(isDesktop ? 40 : 32, isDesktop ? 40 : 32),
+                                          padding: EdgeInsets.zero,
+                                        ),
+                                        icon: Icon(Icons.delete_rounded, size: isDesktop ? 18 : 16),
+                                        onPressed: () => _deleteTeacher(t['id']),
+                                      ),
+                                    ],
+                                  ),
                                 ],
                               ),
                             );
@@ -1916,170 +2681,242 @@ class _OrgAdminDashboardState extends ConsumerState<OrgAdminDashboard> {
       ),
     );
 
-    if (_showTeacherForm) {
-      if (isDesktop) {
-        return Padding(
-          padding: const EdgeInsets.all(32.0),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(child: SingleChildScrollView(child: formCard)),
-              const SizedBox(width: 24),
-              Expanded(child: listCard),
-            ],
-          ),
-        );
-      } else {
-        return SingleChildScrollView(
-          padding: const EdgeInsets.all(16.0),
-          child: Column(
-            children: [
-              formCard,
-              const SizedBox(height: 16),
-              SizedBox(height: 400, child: listCard),
-            ],
-          ),
-        );
-      }
-    } else {
-      return Padding(
-        padding: EdgeInsets.all(isDesktop ? 32.0 : 16.0),
-        child: listCard,
-      );
-    }
+    return Padding(
+      padding: EdgeInsets.all(isDesktop ? 32.0 : 16.0),
+      child: listCard,
+    );
   }
 
   Widget _buildStudentTab(bool isDesktop, ThemeData theme) {
-    final formCard = Card(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: Padding(
-        padding: const EdgeInsets.all(24.0),
-        child: Form(
-          key: _studentFormKey,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Row(
-                children: [
-                  Icon(Icons.group_add_rounded, color: theme.colorScheme.primary),
-                  const SizedBox(width: 8),
-                  Text('Daftarkan Akun Siswa Baru', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
-                ],
-              ),
-              const SizedBox(height: 16),
-              TextFormField(
-                controller: _studentNameController,
-                decoration: const InputDecoration(
-                  labelText: 'Nama Lengkap',
-                  border: OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(12))),
-                ),
-                validator: (v) => v == null || v.trim().isEmpty ? 'Nama wajib diisi' : null,
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: _studentNisnController,
-                decoration: const InputDecoration(
-                  labelText: 'NISN / NIS',
-                  border: OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(12))),
-                ),
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: _studentEmailController,
-                decoration: const InputDecoration(
-                  labelText: 'Email Siswa',
-                  border: OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(12))),
-                ),
-                validator: (v) => v == null || !v.contains('@') ? 'Email tidak valid' : null,
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: _studentPasswordController,
-                obscureText: true,
-                decoration: const InputDecoration(
-                  labelText: 'Password',
-                  border: OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(12))),
-                ),
-                validator: (v) => v == null || v.length < 6 ? 'Password minimal 6 karakter' : null,
-              ),
-              const SizedBox(height: 12),
-              DropdownButtonFormField<String>(
-                value: _studentSelectedClassroomId,
-                decoration: const InputDecoration(
-                  labelText: 'Pilih Kelas',
-                  border: OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(12))),
-                ),
-                items: [
-                  const DropdownMenuItem(value: null, child: Text('-- Pilih Kelas --')),
-                  ..._classrooms.map((c) => DropdownMenuItem(value: c['id'].toString(), child: Text(c['name'].toString()))),
-                ],
-                onChanged: (val) {
-                  setState(() => _studentSelectedClassroomId = val);
-                },
-              ),
-              const SizedBox(height: 20),
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  minimumSize: const Size(double.infinity, 50),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                ),
-                onPressed: _submitStudent,
-                child: const Text('Daftarkan Siswa Baru', style: TextStyle(fontWeight: FontWeight.bold)),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
+    final filteredStudents = _students.where((s) {
+      final query = _studentSearchController.text.toLowerCase();
+      final name = (s['user'] != null ? s['user']['fullName'] : 'Siswa').toString().toLowerCase();
+      final nisn = (s['studentIdNumber'] ?? '').toString().toLowerCase();
+      final cls = (s['classRoom'] != null ? s['classRoom']['name'] : '').toString().toLowerCase();
+      return name.contains(query) || nisn.contains(query) || cls.contains(query);
+    }).toList();
 
     final listCard = Card(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: Padding(
-        padding: const EdgeInsets.all(24.0),
+        padding: EdgeInsets.all(isDesktop ? 24.0 : 12.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Row(
-                  children: [
-                    Icon(Icons.group_rounded, color: theme.colorScheme.primary),
-                    const SizedBox(width: 8),
-                    Text('Daftar Siswa Aktif', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
-                  ],
+            isDesktop
+                ? Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(Icons.group_rounded, color: theme.colorScheme.primary),
+                          const SizedBox(width: 8),
+                          Text('Daftar Siswa Aktif', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+                        ],
+                      ),
+                      FilledButton.icon(
+                        style: FilledButton.styleFrom(
+                          backgroundColor: theme.colorScheme.primary,
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                        icon: const Icon(Icons.add_rounded, size: 20),
+                        label: const Text('Tambah Siswa', style: TextStyle(fontWeight: FontWeight.bold)),
+                        onPressed: _showAddStudentBottomSheet,
+                      ),
+                    ],
+                  )
+                : Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(Icons.group_rounded, color: theme.colorScheme.primary),
+                          const SizedBox(width: 8),
+                          Text('Daftar Siswa Aktif', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      SizedBox(
+                        width: double.infinity,
+                        child: FilledButton.icon(
+                          style: FilledButton.styleFrom(
+                            backgroundColor: theme.colorScheme.primary,
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          ),
+                          icon: const Icon(Icons.add_rounded, size: 20),
+                          label: const Text('Tambah Siswa', style: TextStyle(fontWeight: FontWeight.bold)),
+                          onPressed: _showAddStudentBottomSheet,
+                        ),
+                      ),
+                    ],
+                  ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: _studentSearchController,
+              decoration: InputDecoration(
+                hintText: 'Cari nama siswa, NISN, atau kelas...',
+                prefixIcon: const Icon(Icons.search_rounded),
+                suffixIcon: _studentSearchController.text.isNotEmpty
+                    ? IconButton(
+                        icon: const Icon(Icons.clear_rounded),
+                        onPressed: () => _studentSearchController.clear(),
+                      )
+                    : null,
+                contentPadding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(color: Colors.grey.shade300),
                 ),
-                // Toggle Button for Student Form
-                IconButton.filledTonal(
-                  icon: Icon(_showStudentForm ? Icons.close_rounded : Icons.add_rounded),
-                  onPressed: () => setState(() => _showStudentForm = !_showStudentForm),
-                  tooltip: _showStudentForm ? 'Tutup Formulir' : 'Tambah Siswa',
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(color: Colors.grey.shade200),
                 ),
-              ],
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(color: theme.colorScheme.primary, width: 1.5),
+                ),
+                filled: true,
+                fillColor: Colors.grey.shade50,
+              ),
             ),
-            const Divider(height: 24),
+            const Divider(height: 32),
             Expanded(
               child: _isDirLoading
                   ? const CustomLoadingIndicator()
-                  : _students.isEmpty
+                  : filteredStudents.isEmpty
                       ? const Center(child: Text('Belum ada siswa.', style: TextStyle(color: Colors.grey)))
                       : ListView.separated(
-                          itemCount: _students.length,
-                          separatorBuilder: (_, __) => const Divider(),
+                          itemCount: filteredStudents.length,
+                          separatorBuilder: (_, __) => const SizedBox(height: 12),
                           itemBuilder: (context, idx) {
-                            final s = _students[idx];
+                            final s = filteredStudents[idx];
                             final name = s['user'] != null ? s['user']['fullName'] : 'Siswa';
                             final cls = s['classRoom'] != null ? s['classRoom']['name'] : '-';
-                            return ListTile(
-                              contentPadding: EdgeInsets.zero,
-                              title: Text(name.toString(), style: const TextStyle(fontWeight: FontWeight.bold)),
-                              subtitle: Text('Kelas: $cls  •  NISN: ${s['studentIdNumber'] ?? "-"}', style: const TextStyle(fontSize: 12)),
-                              trailing: Row(
-                                mainAxisSize: MainAxisSize.min,
+                            final nisn = s['studentIdNumber'] ?? "-";
+
+                            // Generate initials for avatar
+                            final nameParts = name.toString().split(' ');
+                            final initials = nameParts.length > 1 
+                                ? '${nameParts[0][0]}${nameParts[1][0]}'.toUpperCase()
+                                : nameParts[0][0].toUpperCase();
+
+                            return Container(
+                              padding: EdgeInsets.symmetric(horizontal: isDesktop ? 16 : 10, vertical: 12),
+                              decoration: BoxDecoration(
+                                color: Colors.grey.shade50,
+                                borderRadius: BorderRadius.circular(16),
+                                border: Border.all(color: Colors.grey.shade100, width: 1.5),
+                              ),
+                              child: Row(
                                 children: [
-                                  IconButton(icon: const Icon(Icons.edit_rounded, size: 20, color: Colors.blue), onPressed: () => _showEditStudentDialog(s)),
-                                  IconButton(icon: const Icon(Icons.delete_rounded, size: 20, color: Colors.red), onPressed: () => _deleteStudent(s['id'])),
+                                  Container(
+                                    width: 48,
+                                    height: 48,
+                                    decoration: BoxDecoration(
+                                      color: theme.colorScheme.primary.withOpacity(0.1),
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: Center(
+                                      child: Text(
+                                        initials,
+                                        style: TextStyle(
+                                          color: theme.colorScheme.primary,
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 16,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 16),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          name.toString(),
+                                          style: const TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 16,
+                                          ),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                        const SizedBox(height: 4),
+                                        Wrap(
+                                          spacing: 12,
+                                          runSpacing: 4,
+                                          crossAxisAlignment: WrapCrossAlignment.center,
+                                          children: [
+                                            Container(
+                                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                              decoration: BoxDecoration(
+                                                color: theme.colorScheme.primary.withOpacity(0.08),
+                                                borderRadius: BorderRadius.circular(8),
+                                              ),
+                                              child: Text(
+                                                cls,
+                                                style: TextStyle(
+                                                  fontSize: 10,
+                                                  fontWeight: FontWeight.bold,
+                                                  color: theme.colorScheme.primary,
+                                                ),
+                                              ),
+                                            ),
+                                            Text.rich(
+                                              TextSpan(
+                                                children: [
+                                                  WidgetSpan(
+                                                    alignment: PlaceholderAlignment.middle,
+                                                    child: Icon(Icons.badge_outlined, size: 14, color: Colors.grey.shade600),
+                                                  ),
+                                                  const WidgetSpan(child: SizedBox(width: 4)),
+                                                  TextSpan(
+                                                    text: 'NISN: $nisn',
+                                                    style: TextStyle(
+                                                      fontSize: 12,
+                                                      color: Colors.grey.shade600,
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                          ],
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      IconButton.filledTonal(
+                                        constraints: const BoxConstraints(),
+                                        style: IconButton.styleFrom(
+                                          backgroundColor: Colors.blue.shade50,
+                                          foregroundColor: Colors.blue,
+                                          minimumSize: Size(isDesktop ? 40 : 32, isDesktop ? 40 : 32),
+                                          padding: EdgeInsets.zero,
+                                        ),
+                                        icon: Icon(Icons.edit_rounded, size: isDesktop ? 18 : 16),
+                                        onPressed: () => _showEditStudentDialog(s),
+                                      ),
+                                      SizedBox(width: isDesktop ? 8 : 4),
+                                      IconButton.filledTonal(
+                                        constraints: const BoxConstraints(),
+                                        style: IconButton.styleFrom(
+                                          backgroundColor: Colors.red.shade50,
+                                          foregroundColor: Colors.red,
+                                          minimumSize: Size(isDesktop ? 40 : 32, isDesktop ? 40 : 32),
+                                          padding: EdgeInsets.zero,
+                                        ),
+                                        icon: Icon(Icons.delete_rounded, size: isDesktop ? 18 : 16),
+                                        onPressed: () => _deleteStudent(s['id']),
+                                      ),
+                                    ],
+                                  ),
                                 ],
                               ),
                             );
@@ -2091,37 +2928,10 @@ class _OrgAdminDashboardState extends ConsumerState<OrgAdminDashboard> {
       ),
     );
 
-    if (_showStudentForm) {
-      if (isDesktop) {
-        return Padding(
-          padding: const EdgeInsets.all(32.0),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(child: SingleChildScrollView(child: formCard)),
-              const SizedBox(width: 24),
-              Expanded(child: listCard),
-            ],
-          ),
-        );
-      } else {
-        return SingleChildScrollView(
-          padding: const EdgeInsets.all(16.0),
-          child: Column(
-            children: [
-              formCard,
-              const SizedBox(height: 16),
-              SizedBox(height: 400, child: listCard),
-            ],
-          ),
-        );
-      }
-    } else {
-      return Padding(
-        padding: EdgeInsets.all(isDesktop ? 32.0 : 16.0),
-        child: listCard,
-      );
-    }
+    return Padding(
+      padding: EdgeInsets.all(isDesktop ? 32.0 : 16.0),
+      child: listCard,
+    );
   }
 
   Widget _buildStatCard(String title, String count, Color color, IconData icon, bool isDesktop) {

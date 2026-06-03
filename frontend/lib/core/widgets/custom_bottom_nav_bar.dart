@@ -24,12 +24,23 @@ class CustomBottomNavBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDarkMode = theme.brightness == Brightness.dark;
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isSmallScreen = screenWidth < 360;
+    final isMobile = screenWidth < 600;
+
+    final double outerPadding = isMobile ? 8.0 : 16.0;
+    final double itemHorizontalPadding = isSmallScreen ? 10.0 : (isMobile ? 14.0 : 20.0);
+    final double itemVerticalPadding = isMobile ? 8.0 : 10.0;
+    final double unselectedHorizontalPadding = isSmallScreen ? 6.0 : (isMobile ? 8.0 : 12.0);
+    final double iconSize = isMobile ? 20.0 : 24.0;
+    final double fontSize = isMobile ? 12.0 : 13.0;
+    final double gap = isMobile ? 6.0 : 8.0;
 
     return SafeArea(
       child: Padding(
-        padding: const EdgeInsets.only(left: 16.0, right: 16.0, bottom: 16.0, top: 8.0),
+        padding: EdgeInsets.only(left: outerPadding, right: outerPadding, bottom: 16.0, top: 8.0),
         child: Container(
-          height: 65,
+          height: isMobile ? 58 : 65,
           decoration: BoxDecoration(
             color: isDarkMode 
                 ? theme.colorScheme.surface.withOpacity(0.85) 
@@ -69,10 +80,10 @@ class CustomBottomNavBar extends StatelessWidget {
                       duration: const Duration(milliseconds: 350),
                       curve: Curves.easeOutCirc,
                       padding: EdgeInsets.symmetric(
-                        horizontal: isSelected ? 20.0 : 12.0,
-                        vertical: 10.0,
+                        horizontal: isSelected ? itemHorizontalPadding : unselectedHorizontalPadding,
+                        vertical: itemVerticalPadding,
                       ),
-                      margin: const EdgeInsets.symmetric(vertical: 8.0),
+                      margin: EdgeInsets.symmetric(vertical: isMobile ? 6.0 : 8.0),
                       decoration: BoxDecoration(
                         color: isSelected
                             ? theme.colorScheme.primary
@@ -103,7 +114,7 @@ class CustomBottomNavBar extends StatelessWidget {
                               color: isSelected
                                   ? Colors.white
                                   : theme.colorScheme.onSurfaceVariant.withOpacity(0.6),
-                              size: 24,
+                              size: iconSize,
                             ),
                           ),
                           AnimatedSize(
@@ -111,13 +122,13 @@ class CustomBottomNavBar extends StatelessWidget {
                             curve: Curves.easeOutCirc,
                             child: isSelected
                                 ? Padding(
-                                    padding: const EdgeInsets.only(left: 8.0),
+                                    padding: EdgeInsets.only(left: gap),
                                     child: Text(
                                       item.label,
-                                      style: const TextStyle(
+                                      style: TextStyle(
                                         color: Colors.white,
                                         fontWeight: FontWeight.bold,
-                                        fontSize: 13,
+                                        fontSize: fontSize,
                                         letterSpacing: 0.2,
                                       ),
                                     ),

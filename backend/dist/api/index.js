@@ -4,8 +4,8 @@ const core_1 = require("@nestjs/core");
 const app_module_1 = require("../src/app.module");
 const common_1 = require("@nestjs/common");
 const platform_express_1 = require("@nestjs/platform-express");
-const express = require("express");
-const server = express();
+const express_1 = require("express");
+const server = (0, express_1.default)();
 async function createNestServer(expressInstance) {
     const app = await core_1.NestFactory.create(app_module_1.AppModule, new platform_express_1.ExpressAdapter(expressInstance));
     app.enableCors({

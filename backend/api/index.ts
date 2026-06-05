@@ -13,7 +13,7 @@ async function bootstrap() {
     // Intercept OPTIONS requests early and respond with CORS headers to avoid preflight failures
     server.use((req, res, next) => {
       res.setHeader('Access-Control-Allow-Credentials', 'true');
-      res.setHeader('Access-Control-Allow-Origin', '*');
+      res.setHeader('Access-Control-Allow-Origin', req.headers.origin || '*');
       res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
       res.setHeader(
         'Access-Control-Allow-Headers',
@@ -32,7 +32,7 @@ async function bootstrap() {
     );
     
     app.enableCors({
-      origin: '*',
+      origin: true,
       methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
       credentials: true,
     });

@@ -8,7 +8,7 @@ async function bootstrap() {
 
   // 1. Enable Global CORS (Highly crucial for Flutter Web/Desktop)
   app.enableCors({
-    origin: '*',
+    origin: true,
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
     credentials: true,
   });
